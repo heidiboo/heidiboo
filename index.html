@@ -901,9 +901,11 @@
 <body>
 
 <!-- LOGIN SCREEN -->
-<div id="login-screen" style="display:none;position:fixed;inset:0;background:#F9F7F3;z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:24px">
-  <div style="font-family:'Courier New',monospace;font-size:28px;font-weight:700;letter-spacing:-0.03em;color:#1A1A1A">heidiboo</div>
-  <div id="login-form" style="display:flex;flex-direction:column;gap:12px;width:300px">
+<div id="login-screen" style="display:none;position:fixed;inset:0;background:#F9F7F3;z-index:9999;align-items:center;justify-content:center;flex-direction:column;gap:24px">
+  <!-- Sprite canvas sits at bottom of login screen -->
+  <canvas id="login-canvas" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"></canvas>
+  <div style="font-family:'Courier New',monospace;font-size:28px;font-weight:700;letter-spacing:-0.03em;color:#1A1A1A;position:relative;z-index:1">heidiboo</div>
+  <div id="login-form" style="display:flex;flex-direction:column;gap:12px;width:300px;position:relative;z-index:1">
     <input id="login-email" type="email" placeholder="your@email.com"
       style="padding:12px 16px;border:1px solid rgba(0,0,0,0.15);border-radius:8px;font-family:Inter,sans-serif;font-size:14px;background:#fff;color:#1A1A1A;outline:none;text-align:center"
       onfocus="this.style.borderColor='#1A1A1A'" onblur="this.style.borderColor='rgba(0,0,0,0.15)'"
@@ -1484,6 +1486,210 @@ async function loadFromSupabase() {
   }
 }
 
+// ---- LOGIN SPRITE ANIMATION ----
+function initLoginSprite() {
+  const cv = document.getElementById('login-canvas');
+  if (!cv) return;
+  const ctx = cv.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+
+  function rsz() {
+    cv.width  = cv.offsetWidth  * dpr;
+    cv.height = cv.offsetHeight * dpr;
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.scale(dpr, dpr);
+  }
+  rsz();
+  window.addEventListener('resize', rsz);
+  const W = () => cv.offsetWidth;
+  const H = () => cv.offsetHeight;
+
+  // Confetti
+  const CONF = ['#1A1A1A','#333','#666','#999','#BBB','#DDD','rgba(255,140,80,0.7)'];
+  const conf = Array.from({length:80}, () => ({x:0,y:0,vx:0,vy:0,r:0,rv:0,w:0,h:0,c:'',on:false,sh:0}));
+  let confA = 0;
+
+  function boom(sx) {
+    confA = 1;
+    conf.forEach(p => {
+      p.x = sx+(Math.random()-.5)*80; p.y = H()*.75;
+      p.vx = (Math.random()-.5)*6;   p.vy = -(4+Math.random()*6);
+      p.r = Math.random()*Math.PI*2; p.rv = (Math.random()-.5)*.2;
+      p.w = 4+Math.random()*7;       p.h = 3+Math.random()*5;
+      p.c = CONF[Math.floor(Math.random()*CONF.length)];
+      p.sh = Math.floor(Math.random()*3); p.on = true;
+    });
+  }
+
+  // Sprite state machine
+  // phases: walk-in → pause → prejump → jump(×3) → wave → walk-out
+  const GRAVITY = 820, NJUMPS = 3;
+  const sp = { x: -60, ph: 'walk-in', pt: 0, jy: 0, jvy: 0, jn: 0, wt: 0 };
+
+  function tick(dt) {
+    sp.pt += dt;
+    if (sp.ph === 'walk-in') {
+      sp.x += 130*dt;
+      if (sp.x >= W()*0.25) { sp.x = W()*0.25; sp.ph = 'pause'; sp.pt = 0; }
+    } else if (sp.ph === 'pause') {
+      if (sp.pt >= 0.8) { sp.ph = 'prejump'; sp.pt = 0; }
+    } else if (sp.ph === 'prejump') {
+      if (sp.pt >= 0.12) { sp.ph = 'jump'; sp.pt = 0; sp.jvy = -310; boom(sp.x); }
+    } else if (sp.ph === 'jump') {
+      sp.jvy += GRAVITY*dt; sp.jy += sp.jvy*dt;
+      if (sp.jy >= 0) {
+        sp.jy = 0; sp.jvy = 0; sp.jn++;
+        if (sp.jn < NJUMPS) { sp.jvy = -295-(sp.jn*15); sp.pt = 0; }
+        else { sp.ph = 'wave'; sp.pt = 0; sp.wt = 0; }
+      }
+    } else if (sp.ph === 'wave') {
+      sp.wt += dt;
+      // wave for 1.8s then walk out
+      if (sp.wt >= 1.8) { sp.ph = 'walk-out'; sp.pt = 0; }
+    } else if (sp.ph === 'walk-out') {
+      sp.x += 160*dt;
+    }
+  }
+
+  function drawArms(airAmt, waving, wavePh) {
+    ctx.strokeStyle='#111'; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.lineWidth=2;
+
+    if (waving) {
+      // Left arm hangs, right arm waves enthusiastically up and down
+      const waveSwing = Math.sin(wavePh * Math.PI * 2 * 3) * 0.6; // fast wave
+      // Left — hangs down
+      const lAng = Math.PI/2 + 0.1;
+      const lMx = -17+Math.cos(Math.PI-lAng)*12, lMy = 2+Math.sin(Math.PI-lAng)*12;
+      const lEx = lMx+Math.cos(Math.PI-lAng+0.3)*9, lEy = lMy+Math.sin(Math.PI-lAng+0.3)*9;
+      ctx.beginPath(); ctx.moveTo(-17,2); ctx.lineTo(lMx,lMy); ctx.lineTo(lEx,lEy); ctx.stroke();
+      ctx.beginPath(); ctx.arc(lEx,lEy,2.5,0,Math.PI*2); ctx.fillStyle='#111'; ctx.fill();
+      // Right — waving up high
+      const rAng = -Math.PI*0.7 + waveSwing;
+      const rMx = 17+Math.cos(rAng)*12, rMy = 0+Math.sin(rAng)*12;
+      const rEx = rMx+Math.cos(rAng+0.4)*9, rEy = rMy+Math.sin(rAng+0.4)*9;
+      ctx.beginPath(); ctx.moveTo(17,0); ctx.lineTo(rMx,rMy); ctx.lineTo(rEx,rEy); ctx.stroke();
+      ctx.beginPath(); ctx.arc(rEx,rEy,2.5,0,Math.PI*2); ctx.fillStyle='#111'; ctx.fill();
+      return;
+    }
+
+    if (airAmt <= 0) return;
+    // Both arms flung up in the air
+    const lAngA = (Math.PI/2)-airAmt*Math.PI*0.85;
+    const lMxA = -17+Math.cos(lAngA)*12, lMyA = Math.sin(lAngA)*12;
+    const lExA = lMxA+Math.cos(lAngA-0.4)*9, lEyA = lMyA+Math.sin(lAngA-0.4)*9;
+    ctx.beginPath(); ctx.moveTo(-17,0); ctx.lineTo(lMxA,lMyA); ctx.lineTo(lExA,lEyA); ctx.stroke();
+    ctx.beginPath(); ctx.arc(lExA,lEyA,2.5,0,Math.PI*2); ctx.fillStyle='#111'; ctx.fill();
+    const rAngA = (Math.PI/2)-airAmt*Math.PI*0.85;
+    const rMxA = 17-Math.cos(rAngA)*12, rMyA = Math.sin(rAngA)*12;
+    const rExA = rMxA-Math.cos(rAngA-0.4)*9, rEyA = rMyA+Math.sin(rAngA-0.4)*9;
+    ctx.beginPath(); ctx.moveTo(17,0); ctx.lineTo(rMxA,rMyA); ctx.lineTo(rExA,rEyA); ctx.stroke();
+    ctx.beginPath(); ctx.arc(rExA,rEyA,2.5,0,Math.PI*2); ctx.fillStyle='#111'; ctx.fill();
+  }
+
+  function drawLoginSoot(x, tSec, ph, pt, jy, wt) {
+    const air = jy < -4;
+    const walk = ph==='walk-in' || ph==='walk-out';
+    const squat = ph==='prejump';
+    const waving = ph==='wave';
+    const airAmt = air ? Math.min(1, Math.abs(jy)/40) : 0;
+    const walkCycle = walk ? tSec*6.5 : 0;
+    const legSwing  = walk ? Math.sin(walkCycle*Math.PI) : 0;
+
+    const gy = H() - 30; // ground line
+
+    ctx.save();
+    ctx.translate(x, gy+jy);
+
+    // shadow
+    const ss = Math.max(.2, 1+jy/120);
+    ctx.beginPath(); ctx.ellipse(0,-jy*.1+16,14*ss,3.5*ss,0,0,Math.PI*2);
+    ctx.fillStyle='rgba(0,0,0,0.07)'; ctx.fill();
+
+    // fuzz
+    const R=20, SPIKES=32;
+    for (let i=0; i<SPIKES; i++) {
+      const a=(i/SPIKES)*Math.PI*2;
+      const slen=3+Math.sin(i*2.1+tSec*3.5)*1.3;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a)*(R-1),Math.sin(a)*(R-1));
+      ctx.lineTo(Math.cos(a)*(R+slen),Math.sin(a)*(R+slen));
+      ctx.strokeStyle='#0d0d0d'; ctx.lineWidth=1.5; ctx.lineCap='round'; ctx.stroke();
+    }
+    ctx.beginPath(); ctx.arc(0,0,R,0,Math.PI*2); ctx.fillStyle='#1A1A1A'; ctx.fill();
+
+    // eyes
+    const sqS=squat?.35:1, sqOY=squat?2:0, ER=5.5, PR=3.6;
+    ctx.beginPath(); ctx.arc(-8,-5+sqOY,ER*sqS,0,Math.PI*2); ctx.fillStyle='#E2DED8'; ctx.fill();
+    ctx.beginPath(); ctx.arc( 8,-5+sqOY,ER*sqS,0,Math.PI*2); ctx.fillStyle='#E2DED8'; ctx.fill();
+    ctx.beginPath(); ctx.arc(-8,-4.5+sqOY,PR*sqS,0,Math.PI*2); ctx.fillStyle='#111'; ctx.fill();
+    ctx.beginPath(); ctx.arc( 8,-4.5+sqOY,PR*sqS,0,Math.PI*2); ctx.fillStyle='#111'; ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,0.85)';
+    ctx.beginPath(); ctx.arc(-6.8,-5.8+sqOY,1.2*sqS,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc( 9.2,-5.8+sqOY,1.2*sqS,0,Math.PI*2); ctx.fill();
+
+    drawArms(airAmt, waving, wt);
+
+    // legs
+    ctx.lineWidth=2;
+    [{bx:-10,s:1},{bx:-3,s:-1},{bx:3,s:1},{bx:10,s:-1}].forEach(l => {
+      const sw = walk ? legSwing*l.s : 0;
+      const angle = 1.45+sw*.5+(air?-.15:0)+(squat?.2:0);
+      const kx=l.bx+Math.cos(angle)*10, ky=16+Math.sin(angle)*10;
+      const fx=kx+Math.cos(angle+.5+sw*.22)*8, fy=ky+Math.sin(angle+.5+sw*.22)*8;
+      ctx.beginPath(); ctx.moveTo(l.bx,16); ctx.lineTo(kx,ky); ctx.lineTo(fx,fy);
+      ctx.strokeStyle='#111'; ctx.stroke();
+    });
+
+    ctx.restore();
+  }
+
+  let startTs=null, lastTs=null, loginSpriteRunning=true;
+  function loginLoop(ts) {
+    if (!loginSpriteRunning) return;
+    if (!startTs) { startTs=ts; lastTs=ts; }
+    const dt = Math.min((ts-lastTs)/1000,.05); lastTs=ts;
+    const tSec = (ts-startTs)/1000;
+
+    rsz();
+    ctx.clearRect(0,0,W(),H());
+
+    // confetti
+    if (confA > 0) {
+      confA = Math.max(0, confA-dt*.18);
+      conf.forEach(p => {
+        if (!p.on) return;
+        p.x+=p.vx; p.y+=p.vy; p.vy+=15*dt*60*dt; p.r+=p.rv;
+        if (p.y > H()+20) { p.on=false; return; }
+        ctx.save(); ctx.globalAlpha=confA*.9;
+        ctx.translate(p.x,p.y); ctx.rotate(p.r);
+        ctx.fillStyle=p.c;
+        if (p.sh===0) ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h);
+        else if (p.sh===1) { ctx.beginPath();ctx.arc(0,0,p.w/2,0,Math.PI*2);ctx.fill(); }
+        else { ctx.beginPath();ctx.moveTo(0,-p.h);ctx.lineTo(p.w/2,p.h/2);ctx.lineTo(-p.w/2,p.h/2);ctx.closePath();ctx.fill(); }
+        ctx.restore();
+      });
+    }
+
+    tick(dt);
+    drawLoginSoot(sp.x, tSec, sp.ph, sp.pt, sp.jy||0, sp.wt||0);
+
+    // When it walks off, wait then restart loop
+    if (sp.ph==='walk-out' && sp.x > W()+80) {
+      // Reset and replay after a pause
+      setTimeout(() => {
+        sp.x=-60; sp.ph='walk-in'; sp.pt=0; sp.jy=0; sp.jvy=0; sp.jn=0; sp.wt=0;
+        startTs=null;
+      }, 2000);
+    }
+
+    requestAnimationFrame(loginLoop);
+  }
+  requestAnimationFrame(loginLoop);
+
+  // Stop when app loads
+  window._stopLoginSprite = () => { loginSpriteRunning = false; };
+}
+
 // ---- AUTH ----
 async function sendMagicLink() {
   const email = document.getElementById('login-email').value.trim();
@@ -1500,26 +1706,42 @@ async function sendMagicLink() {
 }
 
 async function initAuth() {
-  // Check if already logged in
+  // Handle magic link — Supabase puts the token in the URL hash (#access_token=...)
+  const hash = window.location.hash;
+  if (hash && hash.includes('access_token')) {
+    const { data, error } = await sb.auth.getSession();
+    if (data?.session) {
+      // Clean the URL so it doesn't show the token
+      window.history.replaceState(null, '', window.location.pathname);
+      showApp();
+      return;
+    }
+  }
+
+  // Check if already have a valid session
   const { data: { session } } = await sb.auth.getSession();
   if (session) {
     showApp();
     return;
   }
-  // Handle magic link redirect (token in URL)
-  const { data: { session: newSession }, error } = await sb.auth.getSession();
-  if (newSession) { showApp(); return; }
 
-  // Listen for auth state changes (fires when magic link is clicked)
+  // Listen for auth state change (fires when magic link token is processed)
   sb.auth.onAuthStateChange(async (event, session) => {
-    if (session) showApp();
+    if (event === 'SIGNED_IN' && session) {
+      window.history.replaceState(null, '', window.location.pathname);
+      showApp();
+    }
   });
 
   // Show login screen
   document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('focus-panel').style.display = 'none';
+  document.getElementById('work-app').style.display = 'none';
+  initLoginSprite();
 }
 
 async function showApp() {
+  if (window._stopLoginSprite) window._stopLoginSprite();
   document.getElementById('login-screen').style.display = 'none';
   // Pull latest data from Supabase first, then init
   showSyncStatus('Syncing...');
