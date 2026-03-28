@@ -595,7 +595,7 @@
 
   /* Doc editor */
   #doc-modal { position: fixed; inset: 0; z-index: 500; background: var(--bg); overflow-y: auto; display: flex; flex-direction: column; }
-  .doc-editor { min-height: 100vh; display: flex; flex-direction: column; }
+  .doc-editor { position: relative; min-height: 100vh; display: flex; flex-direction: column; }
   .doc-editor-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 32px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: rgba(249,247,243,0.95); backdrop-filter: blur(8px); z-index: 10; flex-wrap: wrap; gap: 8px; }
   .doc-back { background: none; border: none; font-family: var(--sans); font-size: 12px; color: var(--ink2); cursor: pointer; }
   .doc-back:hover { color: var(--ink); }
@@ -603,6 +603,20 @@
   .doc-title-input { width: 100%; border: none; outline: none; font-family: var(--mono); font-size: 2rem; font-weight: 700; color: var(--ink); background: transparent; margin-bottom: 24px; display: block; letter-spacing: -0.02em; }
   .doc-title-input::placeholder { color: rgba(0,0,0,0.15); }
   .doc-body-input { width: 100%; min-height: 60vh; outline: none; font-family: var(--sans); font-size: 14px; color: var(--ink); line-height: 1.8; background: transparent; }
+  /* Show move cursor when hovering over block-level elements to hint drag is possible */
+  .doc-body-input > p:hover::before,
+  .doc-body-input > h1:hover::before,
+  .doc-body-input > h2:hover::before,
+  .doc-body-input > h3:hover::before,
+  .doc-body-input > ul:hover::before,
+  .doc-body-input > ol:hover::before,
+  .doc-body-input > blockquote:hover::before {
+    content: '⠿';
+    position: absolute; left: -20px;
+    color: rgba(0,0,0,0.2); font-size: 12px; cursor: grab;
+    user-select: none;
+  }
+  .doc-body-input > * { position: relative; }
   .doc-body-input:empty:before { content: attr(data-placeholder); color: rgba(0,0,0,0.2); pointer-events: none; }
   .doc-body-input h1 { font-family: var(--mono); font-size: 1.7rem; font-weight: 700; margin: 20px 0 8px; }
   .doc-body-input h2 { font-family: var(--mono); font-size: 1.3rem; font-weight: 700; margin: 16px 0 6px; }
@@ -615,21 +629,17 @@
   .doc-body-input table th { background:rgba(0,0,0,0.04); font-weight:600; }
   .doc-body-input img { max-width:100%; border-radius:8px; margin:10px 0; }
   .doc-callout { border-radius: 8px; padding: 13px 15px; margin: 10px 0; display: flex; gap: 10px; align-items: flex-start; }
-  .doc-callout { background: #FFFBEB; border-left: 3px solid #F59E0B; }
-  .doc-callout.blue { background:#EFF6FF; border-color:#3B82F6; }
-  .doc-callout.red { background:#FEF2F2; border-color:#EF4444; }
-  .doc-callout.green { background:#F0FFF4; border-color:#22C55E; }
-  .doc-callout.purple { background:#F5F3FF; border-color:#8B5CF6; }
-  .doc-callout-icon { font-size:14px; flex-shrink:0; margin-top:1px; }
+  .doc-callout { background: #FFF8E8; border-left: 3px solid #DDD; }
+  .doc-callout.blue   { background: #F0F4FF; border-color: #6699FF; }
+  .doc-callout.red    { background: #FFF0F0; border-color: #E24B4A; }
+  .doc-callout.green  { background: #F0F8F0; border-color: #639922; }
+  .doc-callout.purple { background: #F5F0FF; border-color: #7F77DD; }
+  .doc-callout.default { background: #FAEEDA; border-color: #BA7517; }
   .doc-callout-text { flex:1; outline:none; font-family:var(--sans); font-size:13px; line-height:1.6; }
   .doc-bookmark { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin: 10px 0; display: flex; gap: 10px; align-items: center; text-decoration: none; color: var(--ink); }
-  .doc-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 10px 0; border: 1px dashed var(--border); border-radius: 8px; padding: 10px; }
-  .doc-2col-cell { outline: none; min-height: 48px; padding: 6px; font-family: var(--sans); font-size: 14px; line-height: 1.7; border: 1px solid transparent; border-radius: 4px; }
-  .doc-2col-cell:focus { border-color: var(--border); background: rgba(0,0,0,0.02); }
-  .doc-2col-cell:empty:before { content: 'Type here...'; color: rgba(0,0,0,0.2); pointer-events: none; }
 
   /* Slash menu */
-  #slash-menu { position: fixed; z-index: 600; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-lg); width: 250px; overflow: hidden; backdrop-filter: blur(8px); }
+  #slash-menu { position: absolute; z-index: 600; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-lg); width: 250px; overflow: hidden; backdrop-filter: blur(8px); }
   .slash-menu-inner { padding: 6px; }
   .slash-item { display: flex; align-items: center; gap: 10px; padding: 7px 9px; border-radius: var(--radius-sm); cursor: pointer; transition: background 0.1s; }
   .slash-item:hover, .slash-item.active { background: rgba(0,0,0,0.05); }
@@ -642,11 +652,106 @@
   .callout-picker { position: relative; display: inline-block; }
   .callout-swatches { position: absolute; top: calc(100% + 4px); left: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: var(--shadow-lg); padding: 5px; z-index: 700; min-width: 120px; }
   .callout-swatch { padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 500; }
-  .callout-swatch.yellow { background:#FFFBEB; color:#92400E; }
-  .callout-swatch.blue   { background:#EFF6FF; color:#1E40AF; }
-  .callout-swatch.red    { background:#FEF2F2; color:#991B1B; }
-  .callout-swatch.green  { background:#F0FFF4; color:#166534; }
-  .callout-swatch.purple { background:#F5F3FF; color:#5B21B6; }
+  .callout-swatch.yellow { background:#FAEEDA; color:#633806; }
+  .callout-swatch.blue   { background:#F0F4FF; color:#042C53; }
+  .callout-swatch.red    { background:#FFF0F0; color:#501313; }
+  .callout-swatch.green  { background:#F0F8F0; color:#173404; }
+  .callout-swatch.purple { background:#F5F0FF; color:#26215C; }
+  /* Callout icon — clickable to open emoji picker */
+  .doc-callout-icon { font-size:16px; flex-shrink:0; margin-top:1px; cursor:pointer; user-select:none; border-radius:4px; padding:1px 3px; transition:background 0.1s; }
+  .doc-callout-icon:hover { background:rgba(0,0,0,0.07); }
+  /* Doc drag-drop zone overlay — shows when dragging */
+  .doc-drop-zone {
+    outline:2px dashed var(--ink); outline-offset:2px;
+    background:rgba(0,0,0,0.03); border-radius:4px;
+  }
+  .doc-drop-col-zone {
+    position:absolute; top:0; bottom:0; width:40%;
+    background:rgba(0,0,0,0.04); border:2px dashed rgba(0,0,0,0.15);
+    border-radius:6px; z-index:20; display:none; pointer-events:none;
+    transition:background 0.1s;
+  }
+  .doc-drop-col-zone.left  { left:0; }
+  .doc-drop-col-zone.right { right:0; }
+  /* Resizable images in doc */
+  .doc-img-wrap { display:block; position:relative; max-width:100%; margin:12px 0; width:100%; }
+  .doc-img-wrap img { display:block; width:100%; border-radius:8px; }
+  .doc-img-resize { position:absolute; bottom:6px; right:6px; width:16px; height:16px; background:rgba(0,0,0,0.4); border-radius:3px; cursor:se-resize; opacity:0; transition:opacity 0.15s; }
+  .doc-img-wrap:hover .doc-img-resize { opacity:1; }
+  .doc-img-resize::after { content:''; position:absolute; inset:4px; border-right:2px solid #fff; border-bottom:2px solid #fff; }
+  /* Drag-to-column drop zones */
+  .doc-col-drop-left, .doc-col-drop-right {
+    position:absolute; top:0; bottom:0; width:25%; opacity:0; z-index:20;
+    border:2px dashed transparent; border-radius:6px; transition:all 0.15s; pointer-events:none;
+  }
+  .doc-col-drop-left { left:0; }
+  .doc-col-drop-right { right:0; }
+  .doc-body-input > *.drag-target-hover .doc-col-drop-left,
+  .doc-body-input > *.drag-target-hover .doc-col-drop-right { pointer-events:all; opacity:1; border-color:rgba(0,0,0,0.15); background:rgba(0,0,0,0.03); }
+  /* Image alignment toolbar */
+  .doc-img-toolbar {
+    position:absolute; top:8px; left:50%; transform:translateX(-50%);
+    background:rgba(26,26,26,0.82); border-radius:6px; padding:3px 6px;
+    display:flex; gap:2px; opacity:0; transition:opacity 0.15s; pointer-events:none;
+    backdrop-filter:blur(4px);
+  }
+  .doc-img-wrap:hover .doc-img-toolbar { opacity:1; pointer-events:all; }
+  .doc-img-tb-btn {
+    padding:3px 7px; border:none; background:transparent; color:rgba(255,255,255,0.7);
+    font-size:11px; cursor:pointer; border-radius:4px; transition:all 0.1s;
+  }
+  .doc-img-tb-btn:hover,.doc-img-tb-btn.active { background:rgba(255,255,255,0.15); color:#fff; }
+  /* Split pane */
+  .doc-split { display:grid; grid-template-columns:1fr 1fr; gap:0; margin:12px 0; border:1px solid var(--border); border-radius:8px; overflow:hidden; position:relative; }
+  .doc-split-cell { padding:12px 14px; outline:none; min-height:60px; font-family:var(--sans); font-size:14px; line-height:1.7; }
+  .doc-split-cell:empty:before { content:'Type here...'; color:rgba(0,0,0,0.2); pointer-events:none; }
+  .doc-split-cell:first-child { border-right:1px solid var(--border); }
+  .doc-split-divider {
+    position:absolute; top:0; bottom:0; cursor:col-resize;
+    width:8px; background:transparent; z-index:5;
+    transform:translateX(-50%);
+  }
+  .doc-split-divider:hover { background:rgba(0,0,0,0.06); }
+  /* Bookmark popup */
+  #bookmark-popup {
+    position:fixed; z-index:800; background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius); box-shadow:var(--shadow-lg); width:360px; padding:16px;
+    backdrop-filter:blur(8px); display:none;
+  }
+  .bookmark-popup-label { font-family:var(--mono); font-size:8px; letter-spacing:0.1em; text-transform:uppercase; color:var(--ink2); margin-bottom:8px; }
+  .bookmark-popup-input { width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:var(--radius-sm); font-family:var(--sans); font-size:13px; background:var(--bg); color:var(--ink); outline:none; margin-bottom:10px; }
+  .bookmark-popup-input:focus { border-color:var(--ink); }
+  .bookmark-preview { border:1px solid var(--border); border-radius:var(--radius-sm); overflow:hidden; display:none; margin-bottom:10px; text-decoration:none; color:var(--ink); }
+  .bookmark-preview-img { width:100%; height:100px; object-fit:cover; display:block; background:var(--bg); }
+  .bookmark-preview-body { padding:9px 12px; }
+  .bookmark-preview-title { font-size:13px; font-weight:500; margin-bottom:2px; }
+  .bookmark-preview-url { font-size:11px; color:var(--ink2); }
+  /* Image caption button — bottom left */
+  .doc-img-caption-btn {
+    position:absolute; bottom:6px; left:8px;
+    width:20px; height:20px; border-radius:50%;
+    background:rgba(26,26,26,0.75); color:#fff; border:none;
+    font-size:13px; line-height:1; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    opacity:0; transition:opacity 0.15s;
+    pointer-events:none;
+  }
+  .doc-img-wrap:hover .doc-img-caption-btn { opacity:1; pointer-events:all; }
+  .doc-img-caption { text-align:center; font-style:italic; font-size:12px; color:var(--ink2); margin:-4px 0 12px; outline:none; }
+  .doc-img-caption:empty:before { content:'Caption...'; color:rgba(0,0,0,0.25); pointer-events:none; font-style:italic; }
+  .doc-img-caption:focus:empty:before { content:''; }
+  .doc-drag-handle {
+    position:absolute; left:-22px; top:50%; transform:translateY(-50%);
+    width:16px; height:24px; display:flex; align-items:center; justify-content:center;
+    cursor:grab; color:rgba(0,0,0,0.2); font-size:12px; border-radius:3px;
+    opacity:0; transition:opacity 0.1s; user-select:none; z-index:10;
+  }
+  .doc-drag-handle:hover { background:rgba(0,0,0,0.06); color:rgba(0,0,0,0.5); }
+  .doc-body-input > *:hover > .doc-drag-handle { opacity:1; }
+  .doc-block-dragging { opacity:0.25; pointer-events:none; }
+  .doc-drop-above { border-top:2px solid var(--ink) !important; }
+  .doc-drop-left  { outline:2px solid var(--ink); outline-offset:-2px; }
+  .doc-drop-right { outline:2px solid var(--ink); outline-offset:-2px; }
 
   /* Format toolbar */
   .fmt-toolbar { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; }
@@ -1244,10 +1349,29 @@
       <input type="text" id="doc-title-input" placeholder="Untitled doc" class="doc-title-input">
       <div id="doc-body-input" class="doc-body-input" contenteditable="true" data-placeholder="Start writing, or type '/' for commands..."></div>
     </div>
+    <!-- Slash menu lives inside the modal so it scrolls with it -->
+    <div id="slash-menu" style="display:none;position:absolute">
+      <div class="slash-menu-inner" id="slash-menu-inner"></div>
+    </div>
+  </div>
+</div>
+<div id="bookmark-popup">
+  <div class="bookmark-popup-label">Paste a link</div>
+  <input id="bookmark-url-input" class="bookmark-popup-input" type="url" placeholder="https://..."
+    oninput="onBookmarkInput(this.value)" onkeydown="if(event.key==='Enter')confirmBookmark();if(event.key==='Escape')closeBookmarkPopup()">
+  <div id="bookmark-preview" class="bookmark-preview">
+    <img id="bookmark-preview-img" class="bookmark-preview-img" src="" alt="" onerror="this.style.display='none'">
+    <div class="bookmark-preview-body">
+      <div id="bookmark-preview-title" class="bookmark-preview-title"></div>
+      <div id="bookmark-preview-url" class="bookmark-preview-url"></div>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;justify-content:flex-end">
+    <button onclick="closeBookmarkPopup()" style="padding:6px 14px;border:1px solid var(--border);border-radius:6px;background:transparent;font-size:12px;cursor:pointer;color:var(--ink2)">Cancel</button>
+    <button onclick="confirmBookmark()" style="padding:6px 14px;border:none;border-radius:6px;background:var(--ink);color:#F9F7F3;font-size:12px;cursor:pointer">Add bookmark</button>
   </div>
 </div>
 
-<!-- FOLDER MODAL -->
 <div id="folder-modal" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(26,23,20,0.4);align-items:center;justify-content:center">
   <div style="background:var(--surface);border-radius:14px;padding:28px;width:360px;box-shadow:var(--shadow-lg)">
     <div style="font-family:'Playfair Display',serif;font-size:1.2rem;font-weight:700;margin-bottom:20px">New Folder</div>
@@ -1281,11 +1405,6 @@
   </div>
   <div id="emoji-category-tabs" style="display:flex;gap:4px;margin-bottom:10px;overflow-x:auto;padding-bottom:2px"></div>
   <div id="emoji-grid" style="display:grid;grid-template-columns:repeat(8,1fr);gap:2px;max-height:220px;overflow-y:auto"></div>
-</div>
-
-<!-- SLASH MENU -->
-<div id="slash-menu" style="display:none">
-  <div class="slash-menu-inner" id="slash-menu-inner"></div>
 </div>
 
 <script>
@@ -2485,6 +2604,16 @@ function renderEmojiGrid(emojis) {
 }
 
 function pickEmoji(emoji) {
+  const picker = document.getElementById('emoji-picker');
+  // If targeting a callout icon, update that instead
+  if (picker && picker._calloutTarget) {
+    picker._calloutTarget.el.textContent = emoji;
+    picker._calloutTarget = null;
+    picker.style.display = 'none';
+    autoSaveDoc();
+    return;
+  }
+  // Default: folder icon picker
   selectedFolderIcon = emoji;
   folderIconChosen = true;
   document.getElementById('folder-icon-display').textContent = emoji;
@@ -2788,25 +2917,104 @@ function setupEditor() {
     }
 
     if (e.key === 'Enter' && !e.shiftKey) {
+      const sel = window.getSelection();
+      if (!sel.rangeCount) return;
+      const node = sel.getRangeAt(0).startContainer;
+      const parent = node.nodeType === 3 ? node.parentElement : node;
+      const tag = parent?.tagName?.toLowerCase();
+
+      // Check if we're inside a callout text div
+      const calloutText = parent?.closest?.('.doc-callout-text');
+      if (calloutText) {
+        // Check if cursor is at the very end of the callout text
+        const range = sel.getRangeAt(0);
+        const textLen = calloutText.textContent.length;
+        const atEnd = range.collapsed &&
+          range.startContainer === calloutText.lastChild &&
+          range.startOffset === (calloutText.lastChild?.textContent?.length || 0);
+
+        if (atEnd) {
+          // Escape callout — insert a <p> after the parent .doc-callout
+          e.preventDefault();
+          const calloutBlock = calloutText.closest('.doc-callout');
+          if (calloutBlock) {
+            const p = document.createElement('p');
+            p.appendChild(document.createElement('br'));
+            calloutBlock.insertAdjacentElement('afterend', p);
+            const newRange = document.createRange();
+            newRange.setStart(p, 0);
+            newRange.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(newRange);
+          }
+          return;
+        }
+        // Otherwise let browser handle Enter inside callout naturally
+        return;
+      }
+
+      // Let browser handle Enter inside lists, tables naturally
+      if (['li','td','th'].includes(tag)) return;
+
       e.preventDefault();
       hideSlashMenu();
 
-      const sel = window.getSelection();
-      if (!sel.rangeCount) return;
       const range = sel.getRangeAt(0);
       range.deleteContents();
-
-      // Insert a <p> with a <br> so the new line is always focusable
       const p = document.createElement('p');
       p.appendChild(document.createElement('br'));
       range.insertNode(p);
-
-      // Move cursor inside the new paragraph
       const newRange = document.createRange();
       newRange.setStart(p, 0);
       newRange.collapse(true);
       sel.removeAllRanges();
       sel.addRange(newRange);
+    }
+
+    // Shift+Enter inside a callout — same escape behaviour
+    if (e.key === 'Enter' && e.shiftKey) {
+      const sel = window.getSelection();
+      if (!sel.rangeCount) return;
+      const node = sel.getRangeAt(0).startContainer;
+      const parent = node.nodeType === 3 ? node.parentElement : node;
+      const calloutText = parent?.closest?.('.doc-callout-text');
+      if (calloutText) {
+        e.preventDefault();
+        const calloutBlock = calloutText.closest('.doc-callout');
+        if (calloutBlock) {
+          const p = document.createElement('p');
+          p.appendChild(document.createElement('br'));
+          calloutBlock.insertAdjacentElement('afterend', p);
+          const newRange = document.createRange();
+          newRange.setStart(p, 0);
+          newRange.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(newRange);
+        }
+      }
+    }
+
+    // Backspace/Delete inside an empty callout — remove the callout
+    if (e.key === 'Backspace' || e.key === 'Delete') {
+      const sel = window.getSelection();
+      if (!sel.rangeCount) return;
+      const node = sel.getRangeAt(0).startContainer;
+      const parent = node.nodeType === 3 ? node.parentElement : node;
+      const calloutText = parent?.closest?.('.doc-callout-text');
+      if (calloutText && calloutText.textContent.trim() === '') {
+        e.preventDefault();
+        const calloutBlock = calloutText.closest('.doc-callout');
+        if (calloutBlock) {
+          const p = document.createElement('p');
+          p.innerHTML = '<br>';
+          calloutBlock.insertAdjacentElement('afterend', p);
+          calloutBlock.remove();
+          const nr = document.createRange();
+          nr.setStart(p, 0); nr.collapse(true);
+          sel.removeAllRanges(); sel.addRange(nr);
+        }
+        return;
+      }
     }
 
     if (e.key === 'Tab') {
@@ -2816,23 +3024,237 @@ function setupEditor() {
   });
 
   editor.addEventListener('input', function() {
+    // Auto numbered list
     const sel = window.getSelection();
-    if (!sel.rangeCount) return;
-    const range = sel.getRangeAt(0);
-    const text = range.startContainer.textContent || '';
-    const slashIdx = text.lastIndexOf('/');
-    if (slashIdx >= 0) {
-      slashQuery = text.slice(slashIdx + 1).toLowerCase();
-      slashRange = range.cloneRange();
-      showSlashMenu(range);
-    } else {
-      hideSlashMenu();
+    if (sel.rangeCount) {
+      const range = sel.getRangeAt(0);
+      const node = range.startContainer;
+      if (node.nodeType === 3) {
+        const text = node.textContent;
+        if (/^1\.\s$/.test(text)) {
+          node.textContent = '';
+          document.execCommand('insertOrderedList');
+          return;
+        }
+        if (/^-\s$/.test(text) || /^\*\s$/.test(text)) {
+          node.textContent = '';
+          document.execCommand('insertUnorderedList');
+          return;
+        }
+      }
+      // Slash menu detection
+      const range2 = sel.getRangeAt(0);
+      const text2 = range2.startContainer.textContent || '';
+      const slashIdx = text2.lastIndexOf('/');
+      if (slashIdx >= 0) {
+        slashQuery = text2.slice(slashIdx + 1).toLowerCase();
+        slashRange = range2.cloneRange();
+        showSlashMenu(range2);
+      } else {
+        hideSlashMenu();
+      }
+    }
+  });
+
+  // Paste image support
+  editor.addEventListener('paste', function(e) {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        const reader = new FileReader();
+        reader.onload = ev => {
+          const wrap = buildImgWrap(ev.target.result);
+          if (sel2.rangeCount) {
+            const range = sel2.getRangeAt(0);
+            range.deleteContents();
+            range.insertNode(wrap);
+            const p = document.createElement('p');
+            p.innerHTML = '<br>';
+            wrap.insertAdjacentElement('afterend', p);
+            const nr = document.createRange();
+            nr.setStart(p,0); nr.collapse(true);
+            sel2.removeAllRanges(); sel2.addRange(nr);
+          }
+          autoSaveDoc();
+        };
+        reader.readAsDataURL(file);
+        break;
+      }
     }
   });
 
   document.addEventListener('click', function(e) {
     if (!e.target.closest('#slash-menu') && !e.target.closest('#doc-body-input')) hideSlashMenu();
+    if (!e.target.closest('#bookmark-popup')) {
+      // don't close if click is on the popup itself
+    }
   });
+
+  // Inject drag handles into ALL editor blocks on mouseover
+  editor.addEventListener('mouseover', function(e) {
+    const block = e.target.closest('#doc-body-input > *');
+    if (!block) return;
+    if (block.classList.contains('doc-drag-handle')) return;
+    if (block.id === '_drop_ind') return;
+    if (!block.querySelector(':scope > .doc-drag-handle')) {
+      const handle = document.createElement('span');
+      handle.className = 'doc-drag-handle';
+      handle.textContent = '⠿';
+      handle.setAttribute('contenteditable','false');
+      handle.title = 'Drag to move';
+      handle.addEventListener('mousedown', e2 => {
+        e2.preventDefault();
+        e2.stopPropagation();
+        startBlockDrag(e2, block);
+      });
+      block.style.position = 'relative';
+      block.insertBefore(handle, block.firstChild);
+    }
+  });
+}
+
+// ---- BLOCK DRAG SYSTEM ----
+let _dragBlock = null;
+// Drop indicators
+let _dropIndicator = null;
+
+function getDropIndicator() {
+  if (!_dropIndicator) {
+    _dropIndicator = document.createElement('div');
+    _dropIndicator.style.cssText = 'height:2px;background:var(--ink);border-radius:2px;margin:2px 0;pointer-events:none;display:none;';
+    _dropIndicator.id = '_drop_ind';
+  }
+  return _dropIndicator;
+}
+
+function startBlockDrag(e, block) {
+  e.preventDefault();
+  e.stopPropagation();
+  _dragBlock = block;
+  block.classList.add('doc-block-dragging');
+
+  const ind = getDropIndicator();
+  document.getElementById('doc-body-input')?.appendChild(ind);
+
+  // Drop zone type: 'before', 'after', 'left', 'right'
+  let _dropTarget = null, _dropType = null;
+
+  function onMove(ev) {
+    const editor = document.getElementById('doc-body-input');
+    if (!editor) return;
+    const blocks = [...editor.children].filter(b => b !== _dragBlock && b.id !== '_drop_ind');
+
+    // Clear all highlights
+    blocks.forEach(b => {
+      b.classList.remove('doc-block-dragover');
+      b.style.outline = '';
+    });
+    ind.style.display = 'none';
+    _dropTarget = null; _dropType = null;
+
+    for (const b of blocks) {
+      const r = b.getBoundingClientRect();
+      if (ev.clientY < r.top || ev.clientY > r.bottom) continue;
+
+      // Determine left/right vs top/bottom drop
+      const xFrac = (ev.clientX - r.left) / r.width;
+      const yInTop = ev.clientY < r.top + r.height * 0.25;
+      const yInBot = ev.clientY > r.top + r.height * 0.75;
+
+      if (!yInTop && !yInBot && xFrac < 0.25) {
+        // Left zone → merge into split (left)
+        _dropTarget = b; _dropType = 'left';
+        b.style.outline = '2px solid var(--ink)';
+        b.style.outlineOffset = '-2px';
+      } else if (!yInTop && !yInBot && xFrac > 0.75) {
+        // Right zone → merge into split (right)
+        _dropTarget = b; _dropType = 'right';
+        b.style.outline = '2px solid var(--ink)';
+        b.style.outlineOffset = '-2px';
+      } else if (yInTop || ev.clientY < r.top + r.height / 2) {
+        _dropTarget = b; _dropType = 'before';
+        b.before(ind);
+        ind.style.display = 'block';
+      } else {
+        _dropTarget = b; _dropType = 'after';
+        b.after(ind);
+        ind.style.display = 'block';
+      }
+      break;
+    }
+  }
+
+  function onUp(ev) {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    _dragBlock.classList.remove('doc-block-dragging');
+    ind.style.display = 'none';
+    if (ind.parentNode) ind.parentNode.removeChild(ind);
+
+    const editor = document.getElementById('doc-body-input');
+    if (!editor) return;
+    [...editor.children].forEach(b => { b.classList.remove('doc-block-dragover'); b.style.outline = ''; });
+
+    if (!_dropTarget) { _dragBlock = null; return; }
+
+    if (_dropType === 'before') {
+      _dropTarget.before(_dragBlock);
+    } else if (_dropType === 'after') {
+      _dropTarget.after(_dragBlock);
+    } else if (_dropType === 'left' || _dropType === 'right') {
+      // Create a split pane from two blocks
+      const splitId = 'split_' + Date.now();
+      const cellA = document.createElement('div');
+      cellA.className = 'doc-split-cell';
+      cellA.setAttribute('contenteditable','true');
+      const cellB = document.createElement('div');
+      cellB.className = 'doc-split-cell';
+      cellB.setAttribute('contenteditable','true');
+
+      // Clone inner content (remove drag handle first)
+      const cleanClone = el => {
+        const c = el.cloneNode(true);
+        c.querySelectorAll('.doc-drag-handle').forEach(h => h.remove());
+        return c.innerHTML || el.textContent || '<br>';
+      };
+
+      if (_dropType === 'left') {
+        cellA.innerHTML = cleanClone(_dragBlock);
+        cellB.innerHTML = cleanClone(_dropTarget);
+      } else {
+        cellA.innerHTML = cleanClone(_dropTarget);
+        cellB.innerHTML = cleanClone(_dragBlock);
+      }
+
+      const split = document.createElement('div');
+      split.className = 'doc-split';
+      split.id = splitId;
+      split.setAttribute('contenteditable','false');
+      const divider = document.createElement('div');
+      divider.className = 'doc-split-divider';
+      divider.style.left = '50%';
+      divider.addEventListener('mousedown', ev2 => startSplitResize(ev2, splitId));
+      split.appendChild(cellA);
+      split.appendChild(cellB);
+      split.appendChild(divider);
+
+      _dropTarget.replaceWith(split);
+      _dragBlock.remove();
+
+      const p = document.createElement('p');
+      p.innerHTML = '<br>';
+      split.insertAdjacentElement('afterend', p);
+    }
+
+    _dragBlock = null;
+    autoSaveDoc();
+  }
+
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
 }
 
 function showSlashMenu(range) {
@@ -2861,8 +3283,12 @@ function showSlashMenu(range) {
   document.getElementById('slash-menu-inner').innerHTML = html;
 
   const rect = range.getBoundingClientRect();
-  menu.style.left = Math.min(rect.left, window.innerWidth - 280) + 'px';
-  menu.style.top = (rect.bottom + 8) + 'px';
+  const modal = document.getElementById('doc-modal');
+  const scrollTop = modal ? modal.scrollTop : 0;
+  const scrollLeft = modal ? modal.scrollLeft : 0;
+  const modalRect = modal ? modal.getBoundingClientRect() : {left:0,top:0};
+  menu.style.left = Math.min(rect.left - modalRect.left, window.innerWidth - 280) + 'px';
+  menu.style.top  = (rect.bottom - modalRect.top + scrollTop + 8) + 'px';
   menu.style.display = 'block';
 }
 
@@ -2909,15 +3335,50 @@ function insertCallout(color) {
   editor.focus();
   const icons = { '':'💡', 'blue':'💙', 'red':'⚠️', 'green':'✅', 'purple':'💜' };
   const icon = icons[color] || '💡';
-  const cls = color ? `doc-callout ${color}` : 'doc-callout';
-  // Insert a wrapper div that is NOT contenteditable, with an inner editable span
-  const html = `<div class="${cls}"><span class="doc-callout-icon">${icon}</span><div class="doc-callout-text" contenteditable="true">Type your note here...</div></div><p><br></p>`;
+  const cls = color ? `doc-callout ${color}` : 'doc-callout default';
+  const calloutId = 'callout_' + Date.now();
+  const html = `<div class="${cls}" id="${calloutId}"><span class="doc-callout-icon" onclick="openCalloutEmojiPicker('${calloutId}',this)" title="Change icon">${icon}</span><div class="doc-callout-text" contenteditable="true">Type your note here...</div></div><p><br></p>`;
   document.execCommand('insertHTML', false, html);
+}
+
+function openCalloutEmojiPicker(calloutId, iconEl) {
+  const picker = document.getElementById('emoji-picker');
+  if (!picker) return;
+  // Must set target BEFORE display so pickEmoji routes correctly
+  picker._calloutTarget = { id: calloutId, el: iconEl };
+  const rect = iconEl.getBoundingClientRect();
+  picker.style.position = 'fixed';
+  picker.style.left = Math.min(rect.left, window.innerWidth - 340) + 'px';
+  picker.style.top  = (rect.bottom + 6) + 'px';
+  picker.style.zIndex = '9000';
+  picker.style.display = 'block';
+  document.getElementById('emoji-search').value = '';
+  renderEmojiCategories();
+  showEmojiCategory(Object.keys(EMOJI_DATA)[0], 0);
+  setTimeout(() => document.getElementById('emoji-search').focus(), 50);
 }
 
 function insertBlock(cmd) {
   const editor = document.getElementById('doc-body-input');
   editor.focus();
+
+  // Block callout-in-callout
+  const sel = window.getSelection();
+  if (sel.rangeCount && cmd.startsWith('callout')) {
+    const node = sel.getRangeAt(0).startContainer;
+    const parent = node.nodeType === 3 ? node.parentElement : node;
+    if (parent?.closest?.('.doc-callout')) {
+      // Already inside a callout — escape first then insert
+      const calloutBlock = parent.closest('.doc-callout');
+      const p = document.createElement('p');
+      p.innerHTML = '<br>';
+      calloutBlock.insertAdjacentElement('afterend', p);
+      const r = document.createRange();
+      r.setStart(p,0); r.collapse(true);
+      sel.removeAllRanges(); sel.addRange(r);
+    }
+  }
+
   let html = '';
   switch(cmd) {
     case 'p':       html = '<p><br></p>'; break;
@@ -2928,7 +3389,7 @@ function insertBlock(cmd) {
     case 'ol':      document.execCommand('insertOrderedList'); return;
     case 'quote':   document.execCommand('formatBlock', false, 'BLOCKQUOTE'); return;
     case 'divider': html = '<hr><p><br></p>'; break;
-    case 'callout': insertCallout(''); return;
+    case 'callout':        insertCallout(''); return;
     case 'callout-blue':   insertCallout('blue'); return;
     case 'callout-red':    insertCallout('red'); return;
     case 'callout-green':  insertCallout('green'); return;
@@ -2937,8 +3398,7 @@ function insertBlock(cmd) {
       html = `<table><thead><tr><th>Column 1</th><th>Column 2</th><th>Column 3</th></tr></thead><tbody><tr><td><br></td><td><br></td><td><br></td></tr><tr><td><br></td><td><br></td><td><br></td></tr></tbody></table><p><br></p>`;
       break;
     case '2col':
-      html = `<div class="doc-2col"><div class="doc-2col-cell" contenteditable="true"><br></div><div class="doc-2col-cell" contenteditable="true"><br></div></div><p><br></p>`;
-      break;
+      insertSplitPane(); return;
     case 'bookmark': promptBookmark(); return;
     case 'image':    promptImage(); return;
     case 'todo':     insertDocTodo(); return;
@@ -2947,23 +3407,255 @@ function insertBlock(cmd) {
   document.execCommand('insertHTML', false, html);
 }
 
+function insertSplitPane() {
+  const splitId = 'split_' + Date.now();
+  const html = `<div class="doc-split" id="${splitId}" contenteditable="false">
+    <div class="doc-split-cell" contenteditable="true"><br></div>
+    <div class="doc-split-cell" contenteditable="true"><br></div>
+    <div class="doc-split-divider" onmousedown="startSplitResize(event,'${splitId}')"></div>
+  </div><p><br></p>`;
+  fmtExec('insertHTML', html);
+  // Position divider at 50%
+  setTimeout(() => {
+    const split = document.getElementById(splitId);
+    if (split) {
+      const div = split.querySelector('.doc-split-divider');
+      if (div) div.style.left = '50%';
+    }
+  }, 50);
+}
+
+function startSplitResize(e, id) {
+  e.preventDefault();
+  const split = document.getElementById(id);
+  if (!split) return;
+  const startX = e.clientX;
+  const totalW = split.offsetWidth;
+  const cells = split.querySelectorAll('.doc-split-cell');
+  const startLeft = cells[0].offsetWidth / totalW;
+
+  function onMove(ev) {
+    const delta = (ev.clientX - startX) / totalW;
+    const newLeft = Math.max(0.15, Math.min(0.85, startLeft + delta));
+    split.style.gridTemplateColumns = `${newLeft}fr ${1-newLeft}fr`;
+    const div = split.querySelector('.doc-split-divider');
+    if (div) div.style.left = (newLeft * 100) + '%';
+  }
+  function onUp() {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    autoSaveDoc();
+  }
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
 function fmtExec(cmd, val) {
   document.getElementById('doc-body-input').focus();
   document.execCommand(cmd, false, val || null);
 }
 
+let _bookmarkSavedRange = null;
+
 function promptBookmark() {
-  const url = prompt('Paste a URL for your bookmark:');
+  // Save cursor position so we can insert after popup closes
+  const sel = window.getSelection();
+  if (sel.rangeCount) _bookmarkSavedRange = sel.getRangeAt(0).cloneRange();
+
+  const popup = document.getElementById('bookmark-popup');
+  const input = document.getElementById('bookmark-url-input');
+  input.value = '';
+  document.getElementById('bookmark-preview').style.display = 'none';
+
+  // Position near cursor
+  if (_bookmarkSavedRange) {
+    const rect = _bookmarkSavedRange.getBoundingClientRect();
+    const left = Math.min(rect.left, window.innerWidth - 380);
+    const top  = rect.bottom + 8;
+    popup.style.left = left + 'px';
+    popup.style.top  = top  + 'px';
+  } else {
+    popup.style.left = '50%';
+    popup.style.top  = '40%';
+    popup.style.transform = 'translate(-50%,-50%)';
+  }
+  popup.style.display = 'block';
+  setTimeout(() => input.focus(), 50);
+}
+
+let _bookmarkFetchTimer = null;
+function onBookmarkInput(url) {
+  clearTimeout(_bookmarkFetchTimer);
+  if (!url || !url.startsWith('http')) return;
+  _bookmarkFetchTimer = setTimeout(() => fetchBookmarkMeta(url), 600);
+}
+
+async function fetchBookmarkMeta(url) {
+  try {
+    const res = await fetch(`https://api.microlink.io?url=${encodeURIComponent(url)}`);
+    const data = await res.json();
+    if (data.status !== 'success') return;
+    const { title, image } = data.data;
+    const preview = document.getElementById('bookmark-preview');
+    const img = document.getElementById('bookmark-preview-img');
+    const titleEl = document.getElementById('bookmark-preview-title');
+    const urlEl = document.getElementById('bookmark-preview-url');
+    titleEl.textContent = title || url;
+    urlEl.textContent = url.replace(/^https?:\/\/(www\.)?/, '').split('/')[0];
+    if (image?.url) { img.src = image.url; img.style.display = 'block'; }
+    else img.style.display = 'none';
+    preview.style.display = 'block';
+  } catch(e) {
+    // silently fail — user can still add without preview
+  }
+}
+
+function confirmBookmark() {
+  const url = document.getElementById('bookmark-url-input').value.trim();
   if (!url) return;
-  const title = url.replace(/^https?:\/\/(www\.)?/, '').split('/')[0];
-  const html = `<a href="${url}" target="_blank" rel="noopener" class="doc-bookmark" contenteditable="false"><span class="doc-bookmark-icon">🔗</span><div><div class="doc-bookmark-title">${title}</div><div class="doc-bookmark-url">${url}</div></div></a>`;
+  const title = document.getElementById('bookmark-preview-title').textContent || url;
+  const imgSrc = document.getElementById('bookmark-preview-img').src;
+  const domain = url.replace(/^https?:\/\/(www\.)?/,'').split('/')[0];
+
+  closeBookmarkPopup();
+
+  // Restore cursor
+  if (_bookmarkSavedRange) {
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(_bookmarkSavedRange);
+  }
+
+  const hasImg = imgSrc && !imgSrc.startsWith('data:') && document.getElementById('bookmark-preview-img').style.display !== 'none';
+  const html = `<a href="${escHtml(url)}" target="_blank" rel="noopener" class="doc-bookmark" contenteditable="false">
+    ${hasImg ? `<img src="${escHtml(imgSrc)}" style="width:80px;height:56px;object-fit:cover;border-radius:6px;flex-shrink:0">` : '<span style="font-size:20px">🔗</span>'}
+    <div>
+      <div style="font-size:13px;font-weight:500;color:var(--ink)">${escHtml(title)}</div>
+      <div style="font-size:11px;color:var(--ink2);margin-top:2px">${escHtml(domain)}</div>
+    </div>
+  </a><p><br></p>`;
   fmtExec('insertHTML', html);
 }
 
+function closeBookmarkPopup() {
+  document.getElementById('bookmark-popup').style.display = 'none';
+}
+
 function promptImage() {
-  const url = prompt('Paste an image URL:');
+  // Show inline image picker panel
+  const imgId = 'img_' + Date.now();
+  const html = `<div class="doc-img-picker" id="picker_${imgId}" contenteditable="false">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <label style="padding:7px 14px;background:var(--ink);color:#F9F7F3;border-radius:6px;font-size:12px;cursor:pointer;font-family:var(--sans)">
+        Upload file <input type="file" accept="image/*" style="display:none" onchange="handleImgUpload(event,'picker_${imgId}')">
+      </label>
+      <input type="url" placeholder="Or paste image URL..." onkeydown="if(event.key==='Enter')insertImgFromUrl(this,'picker_${imgId}')"
+        style="flex:1;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--sans);background:var(--bg);color:var(--ink);outline:none;min-width:180px">
+      <button onclick="insertImgFromUrl(this.previousElementSibling,'picker_${imgId}')" style="padding:7px 12px;border:1px solid var(--border);border-radius:6px;font-size:12px;cursor:pointer;background:transparent;color:var(--ink)">Insert</button>
+      <button onclick="document.getElementById('picker_${imgId}').remove()" style="padding:7px 8px;border:none;background:none;font-size:14px;color:var(--ink2);cursor:pointer">✕</button>
+    </div>
+    <div style="font-size:11px;color:var(--ink2);margin-top:6px">Or paste an image anywhere in the doc with ⌘V</div>
+  </div><p><br></p>`;
+  fmtExec('insertHTML', html);
+}
+
+function handleImgUpload(e, pickerId) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    replacePickerWithImg(pickerId, ev.target.result);
+  };
+  reader.readAsDataURL(file);
+}
+
+function insertImgFromUrl(input, pickerId) {
+  const url = input.value.trim();
   if (!url) return;
-  fmtExec('insertHTML', `<img src="${url}" alt="image" style="max-width:100%;border-radius:8px;margin:12px 0">`);
+  replacePickerWithImg(pickerId, url);
+}
+
+// All image sources go through buildImgWrap — identical controls everywhere
+function buildImgWrap(src) {
+  const imgId = 'img_' + Date.now();
+  const wrap = document.createElement('div');
+  wrap.className = 'doc-img-wrap';
+  wrap.id = imgId;
+  wrap.setAttribute('contenteditable','false');
+  wrap.style.cssText = 'width:100%;max-width:100%;margin:12px 0;';
+  wrap.innerHTML = `
+    <div class="doc-img-toolbar">
+      <button class="doc-img-tb-btn active" onclick="setImgAlign('${imgId}','left')" title="Left">⬜ Left</button>
+      <button class="doc-img-tb-btn" onclick="setImgAlign('${imgId}','center')" title="Center">▣ Center</button>
+      <button class="doc-img-tb-btn" onclick="setImgAlign('${imgId}','right')" title="Right">Right ⬜</button>
+    </div>
+    <img src="${src}" alt="image" style="width:100%;border-radius:8px;display:block">
+    <button class="doc-img-caption-btn" onclick="addImgCaption('${imgId}')" title="Add caption">+</button>
+    <div class="doc-img-resize" onmousedown="startImgResize(event,'${imgId}')" title="Drag to resize"></div>`;
+  return wrap;
+}
+
+function replacePickerWithImg(pickerId, src) {
+  const picker = document.getElementById(pickerId);
+  if (!picker) return;
+  const wrap = buildImgWrap(src);
+  picker.replaceWith(wrap);
+  const p = document.createElement('p');
+  p.innerHTML = '<br>';
+  wrap.insertAdjacentElement('afterend', p);
+  autoSaveDoc();
+}
+
+function addImgCaption(imgId) {
+  const wrap = document.getElementById(imgId);
+  if (!wrap) return;
+  // Don't add duplicate caption
+  if (wrap.nextElementSibling?.classList.contains('doc-img-caption')) return;
+  const caption = document.createElement('p');
+  caption.className = 'doc-img-caption';
+  caption.setAttribute('contenteditable','true');
+  caption.style.cssText = 'text-align:center;font-style:italic;font-size:12px;color:var(--ink2);margin:-4px 0 12px;outline:none;';
+  caption.innerHTML = '<br>';
+  wrap.insertAdjacentElement('afterend', caption);
+  // Select all text so they can type immediately
+  const r = document.createRange();
+  r.selectNodeContents(caption);
+  const sel = window.getSelection();
+  sel.removeAllRanges(); sel.addRange(r);
+  autoSaveDoc();
+}
+
+function setImgAlign(imgId, align) {
+  const wrap = document.getElementById(imgId);
+  if (!wrap) return;
+  const btns = wrap.querySelectorAll('.doc-img-tb-btn');
+  btns.forEach((b,i) => b.classList.toggle('active', ['left','center','right'][i]===align));
+  if (align==='left')   { wrap.style.marginRight='auto'; wrap.style.marginLeft='0'; wrap.style.width='60%'; }
+  if (align==='center') { wrap.style.margin='12px auto'; wrap.style.width='100%'; }
+  if (align==='right')  { wrap.style.marginLeft='auto'; wrap.style.marginRight='0'; wrap.style.width='60%'; }
+  autoSaveDoc();
+}
+
+function startImgResize(e, id) {
+  e.preventDefault();
+  const wrap = document.getElementById(id);
+  const img  = wrap?.querySelector('img');
+  if (!wrap || !img) return;
+  const startX = e.clientX;
+  const startW = wrap.offsetWidth;
+
+  function onMove(ev) {
+    const newW = Math.max(80, startW + (ev.clientX - startX));
+    wrap.style.width = newW + 'px';
+    wrap.style.maxWidth = '100%';
+  }
+  function onUp() {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    autoSaveDoc();
+  }
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
 }
 
 function insertDocTodo() {
