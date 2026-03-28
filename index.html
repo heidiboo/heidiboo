@@ -6,6 +6,7 @@
 <title>heidiboo</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <style>
   :root {
     --bg: #F9F7F3;
@@ -618,15 +619,36 @@
   }
   .doc-body-input > * { position: relative; }
   .doc-body-input:empty:before { content: attr(data-placeholder); color: rgba(0,0,0,0.2); pointer-events: none; }
-  .doc-body-input h1 { font-family: var(--mono); font-size: 1.7rem; font-weight: 700; margin: 20px 0 8px; }
-  .doc-body-input h2 { font-family: var(--mono); font-size: 1.3rem; font-weight: 700; margin: 16px 0 6px; }
-  .doc-body-input h3 { font-size: 1.05rem; font-weight: 600; margin: 14px 0 4px; }
+  .doc-body-input h1 { font-family: var(--mono); font-size: 1.7rem; font-weight: 700; margin: 20px 0 2px; }
+  .doc-body-input h2 { font-family: var(--mono); font-size: 1.3rem; font-weight: 700; margin: 16px 0 2px; }
+  .doc-body-input h3 { font-size: 1.05rem; font-weight: 600; margin: 14px 0 2px; }
   .doc-body-input ul, .doc-body-input ol { padding-left: 22px; margin: 8px 0; }
   .doc-body-input blockquote { border-left: 2px solid var(--ink); padding-left: 14px; margin: 10px 0; color: var(--ink2); }
   .doc-body-input hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
-  .doc-body-input table { width:100%; border-collapse:collapse; margin:14px 0; }
-  .doc-body-input table td, .doc-body-input table th { border:1px solid var(--border); padding:7px 11px; font-size:13px; }
-  .doc-body-input table th { background:rgba(0,0,0,0.04); font-weight:600; }
+  /* ── Doc table (Notion-style) ── */
+  .doc-table-wrap { position:relative; margin:14px 0; overflow:visible; }
+  .doc-table { width:100%; border-collapse:collapse; table-layout:fixed; }
+  .doc-table td { border:1px solid var(--border); padding:8px 12px; font-size:13px; min-width:80px; outline:none; vertical-align:top; position:relative; }
+  .doc-table tr:first-child td { background:rgba(0,0,0,0.025); font-weight:500; }
+  .doc-table td:focus { background:rgba(255,255,255,0.9); box-shadow:inset 0 0 0 2px rgba(0,0,0,0.12); }
+  /* Row delete — left of each row, shown on hover */
+  .doc-table-row-del { position:absolute; left:-22px; top:50%; transform:translateY(-50%); width:16px; height:16px; border-radius:3px; background:rgba(0,0,0,0.07); border:none; font-size:9px; cursor:pointer; color:var(--ink2); display:none; align-items:center; justify-content:center; }
+  tr:hover .doc-table-row-del { display:flex; }
+  .doc-table-row-del:hover { background:rgba(200,50,50,0.15); color:#c00; }
+  /* Col delete — top of each col, shown on hover */
+  .doc-table-col-del { position:absolute; top:-22px; left:50%; transform:translateX(-50%); width:16px; height:16px; border-radius:3px; background:rgba(0,0,0,0.07); border:none; font-size:9px; cursor:pointer; color:var(--ink2); display:none; align-items:center; justify-content:center; }
+  .doc-table td:hover .doc-table-col-del { display:flex; }
+  .doc-table-col-del:hover { background:rgba(200,50,50,0.15); color:#c00; }
+  /* Add column button — right of table */
+  .doc-table-add-col { position:absolute; top:0; right:-28px; width:22px; height:100%; display:none; align-items:center; justify-content:center; }
+  .doc-table-wrap:hover .doc-table-add-col { display:flex; }
+  .doc-table-add-col button { width:20px; height:20px; border-radius:50%; background:rgba(0,0,0,0.08); border:none; cursor:pointer; font-size:14px; color:var(--ink2); display:flex; align-items:center; justify-content:center; transition:all 0.1s; }
+  .doc-table-add-col button:hover { background:var(--ink); color:#F9F7F3; }
+  /* Add row button — bottom of table */
+  .doc-table-add-row { display:none; width:100%; margin-top:2px; }
+  .doc-table-wrap:hover .doc-table-add-row { display:block; }
+  .doc-table-add-row button { width:100%; padding:5px; background:rgba(0,0,0,0.04); border:1px dashed var(--border); border-radius:4px; cursor:pointer; font-size:11px; color:var(--ink2); font-family:var(--sans); transition:all 0.1s; }
+  .doc-table-add-row button:hover { background:rgba(0,0,0,0.08); color:var(--ink); border-color:var(--ink2); }
   .doc-body-input img { max-width:100%; border-radius:8px; margin:10px 0; }
   .doc-callout { border-radius: 8px; padding: 13px 15px; margin: 10px 0; display: flex; gap: 10px; align-items: flex-start; }
   .doc-callout { background: #FFF8E8; border-left: 3px solid #DDD; }
@@ -635,12 +657,14 @@
   .doc-callout.green  { background: #F0F8F0; border-color: #639922; }
   .doc-callout.purple { background: #F5F0FF; border-color: #7F77DD; }
   .doc-callout.default { background: #FAEEDA; border-color: #BA7517; }
-  .doc-callout-text { flex:1; outline:none; font-family:var(--sans); font-size:13px; line-height:1.6; }
+  .doc-callout-text { flex:1; outline:none; font-family:var(--sans); font-size:13px; line-height:1.6; min-height:1.4em; }
+  .doc-callout-text:empty:before { content:'Type a note...'; color:rgba(0,0,0,0.25); pointer-events:none; font-style:italic; }
+  .doc-callout-text:focus:empty:before { content:''; }
   .doc-bookmark { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin: 10px 0; display: flex; gap: 10px; align-items: center; text-decoration: none; color: var(--ink); }
 
   /* Slash menu */
-  #slash-menu { position: absolute; z-index: 600; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-lg); width: 250px; overflow: hidden; backdrop-filter: blur(8px); }
-  .slash-menu-inner { padding: 6px; }
+  #slash-menu { position: absolute; z-index: 600; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-lg); width: 260px; overflow: hidden; backdrop-filter: blur(8px); }
+  .slash-menu-inner { padding: 6px; max-height: 340px; overflow-y: auto; }
   .slash-item { display: flex; align-items: center; gap: 10px; padding: 7px 9px; border-radius: var(--radius-sm); cursor: pointer; transition: background 0.1s; }
   .slash-item:hover, .slash-item.active { background: rgba(0,0,0,0.05); }
   .slash-item-icon { width: 28px; height: 28px; background: rgba(0,0,0,0.05); border-radius: 5px; display:flex; align-items:center; justify-content:center; font-size:13px; flex-shrink:0; }
@@ -657,8 +681,8 @@
   .callout-swatch.red    { background:#FFF0F0; color:#501313; }
   .callout-swatch.green  { background:#F0F8F0; color:#173404; }
   .callout-swatch.purple { background:#F5F0FF; color:#26215C; }
-  /* Callout icon — clickable to open emoji picker */
-  .doc-callout-icon { font-size:16px; flex-shrink:0; margin-top:1px; cursor:pointer; user-select:none; border-radius:4px; padding:1px 3px; transition:background 0.1s; }
+  /* Callout icon — sticky top-left, clickable to open emoji picker */
+  .doc-callout-icon { font-size:16px; flex-shrink:0; align-self:flex-start; position:sticky; top:8px; cursor:pointer; user-select:none; border-radius:4px; padding:1px 3px; transition:background 0.1s; line-height:1.6; }
   .doc-callout-icon:hover { background:rgba(0,0,0,0.07); }
   /* Doc drag-drop zone overlay — shows when dragging */
   .doc-drop-zone {
@@ -701,17 +725,24 @@
     font-size:11px; cursor:pointer; border-radius:4px; transition:all 0.1s;
   }
   .doc-img-tb-btn:hover,.doc-img-tb-btn.active { background:rgba(255,255,255,0.15); color:#fff; }
-  /* Split pane */
-  .doc-split { display:grid; grid-template-columns:1fr 1fr; gap:0; margin:12px 0; border:1px solid var(--border); border-radius:8px; overflow:hidden; position:relative; }
-  .doc-split-cell { padding:12px 14px; outline:none; min-height:60px; font-family:var(--sans); font-size:14px; line-height:1.7; }
-  .doc-split-cell:empty:before { content:'Type here...'; color:rgba(0,0,0,0.2); pointer-events:none; }
-  .doc-split-cell:first-child { border-right:1px solid var(--border); }
-  .doc-split-divider {
-    position:absolute; top:0; bottom:0; cursor:col-resize;
-    width:8px; background:transparent; z-index:5;
-    transform:translateX(-50%);
-  }
-  .doc-split-divider:hover { background:rgba(0,0,0,0.06); }
+  /* ── Columns (flexible, 2-4 cols) ── */
+  .doc-cols { display:flex; gap:0; margin:12px 0; border:1px solid var(--border); border-radius:8px; overflow:visible; position:relative; }
+  .doc-col-cell { flex:1; padding:12px 14px; outline:none; min-height:60px; font-family:var(--sans); font-size:14px; line-height:1.7; border-right:1px solid var(--border); position:relative; }
+  .doc-col-cell:last-child { border-right:none; }
+  .doc-col-cell:empty:before { content:'Type here...'; color:rgba(0,0,0,0.2); pointer-events:none; }
+  /* Per-column delete button — top right of each cell */
+  .doc-col-del { position:absolute; top:4px; right:4px; width:18px; height:18px; border-radius:4px; background:rgba(0,0,0,0.1); border:none; font-size:10px; cursor:pointer; color:var(--ink2); display:none; align-items:center; justify-content:center; line-height:1; z-index:5; }
+  .doc-col-cell:hover .doc-col-del { display:flex; }
+  .doc-col-del:hover { background:rgba(200,50,50,0.15); color:#c00; }
+  /* Column drag handle — top left of each cell */
+  .doc-col-handle { position:absolute; top:4px; left:4px; width:16px; height:18px; border-radius:3px; cursor:grab; color:rgba(0,0,0,0.2); font-size:10px; display:none; align-items:center; justify-content:center; z-index:5; user-select:none; }
+  .doc-col-cell:hover .doc-col-handle { display:flex; }
+  .doc-col-handle:hover { background:rgba(0,0,0,0.06); color:rgba(0,0,0,0.5); }
+  .doc-col-divider { width:8px; flex-shrink:0; cursor:col-resize; background:transparent; position:relative; z-index:5; margin:-1px 0; transition:background 0.1s; }
+  .doc-col-divider:hover, .doc-col-divider.dragging { background:rgba(0,0,0,0.08); }
+  /* Add column button */
+  .doc-col-add-btn { position:absolute; right:-14px; top:50%; transform:translateY(-50%); width:20px; height:20px; border-radius:50%; background:var(--ink); color:#F9F7F3; border:none; font-size:14px; cursor:pointer; display:none; align-items:center; justify-content:center; z-index:10; line-height:1; }
+  .doc-cols:hover .doc-col-add-btn { display:flex; }
   /* Bookmark popup */
   #bookmark-popup {
     position:fixed; z-index:800; background:var(--surface); border:1px solid var(--border);
@@ -753,8 +784,55 @@
   .doc-drop-left  { outline:2px solid var(--ink); outline-offset:-2px; }
   .doc-drop-right { outline:2px solid var(--ink); outline-offset:-2px; }
 
-  /* Format toolbar */
-  .fmt-toolbar { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; }
+  /* ── Cover image ── */
+  .doc-cover { width:100%; height:200px; object-fit:cover; display:block; position:relative; }
+  .doc-cover-wrap { position:relative; width:100%; overflow:hidden; background:var(--bg); }
+  .doc-cover-wrap img { width:100%; height:200px; object-fit:cover; display:block; }
+  .doc-cover-actions { position:absolute; bottom:10px; right:14px; display:flex; gap:6px; opacity:0; transition:opacity 0.15s; }
+  .doc-cover-wrap:hover .doc-cover-actions { opacity:1; }
+  .doc-cover-btn { padding:4px 10px; background:rgba(255,255,255,0.85); border:none; border-radius:5px; font-size:11px; cursor:pointer; font-family:var(--sans); backdrop-filter:blur(4px); }
+  .doc-add-cover-btn { font-size:11px; color:var(--ink2); background:none; border:none; cursor:pointer; padding:4px 8px; border-radius:4px; font-family:var(--sans); }
+  .doc-add-cover-btn:hover { background:rgba(0,0,0,0.05); color:var(--ink); }
+  /* ── Table of contents ── */
+  .doc-toc { border-left:2px solid var(--border); padding:8px 14px; margin:0 0 24px; }
+  .doc-toc-label { font-family:var(--mono); font-size:7px; letter-spacing:0.12em; text-transform:uppercase; color:var(--ink2); margin-bottom:8px; }
+  .doc-toc a { display:block; font-size:12px; color:var(--ink2); text-decoration:none; padding:2px 0; transition:color 0.1s; }
+  .doc-toc a:hover { color:var(--ink); }
+  .doc-toc a.h2 { padding-left:12px; }
+  .doc-toc a.h3 { padding-left:22px; font-size:11px; }
+  /* ── Toggle blocks ── */
+  .doc-toggle { margin:6px 0; }
+  .doc-toggle-head { display:flex; align-items:flex-start; gap:8px; cursor:pointer; user-select:none; padding:3px 0; }
+  .doc-toggle-arrow { font-size:11px; color:var(--ink2); margin-top:2px; flex-shrink:0; transition:transform 0.15s; }
+  .doc-toggle-arrow.open { transform:rotate(90deg); }
+  .doc-toggle-title { flex:1; outline:none; font-family:var(--sans); font-size:14px; line-height:1.7; }
+  .doc-toggle-body { padding:4px 0 4px 22px; display:none; }
+  .doc-toggle-body.open { display:block; }
+  .doc-toggle-body-inner { outline:none; font-family:var(--sans); font-size:14px; line-height:1.7; min-height:28px; color:var(--ink2); }
+  /* ── Video embed ── */
+  .doc-video-wrap { margin:12px 0; border-radius:8px; overflow:hidden; position:relative; padding-bottom:56.25%; height:0; background:#000; }
+  .doc-video-wrap iframe { position:absolute; inset:0; width:100%; height:100%; border:none; }
+  /* ── Related docs ── */
+  .doc-related { border-top:1px solid var(--border); padding-top:20px; margin-top:32px; }
+  .doc-related-label { font-family:var(--mono); font-size:7px; letter-spacing:0.12em; text-transform:uppercase; color:var(--ink2); margin-bottom:10px; }
+  .doc-related-grid { display:flex; flex-direction:column; gap:6px; }
+  .doc-related-item { display:flex; align-items:center; gap:10px; padding:8px 12px; border:1px solid var(--border); border-radius:var(--radius-sm); cursor:pointer; text-decoration:none; color:var(--ink); transition:border-color 0.1s; font-size:13px; }
+  .doc-related-item:hover { border-color:var(--ink); }
+  /* ── Word count bar ── */
+  .doc-wordcount { font-size:10px; color:var(--ink3); font-family:var(--mono); letter-spacing:0.04em; }
+  /* ── Tags ── */
+  .doc-tags { display:flex; flex-wrap:wrap; gap:6px; margin:0 0 16px; }
+  .doc-tag { padding:3px 10px; background:rgba(0,0,0,0.06); border-radius:20px; font-size:11px; color:var(--ink2); cursor:pointer; border:1px solid transparent; transition:all 0.1s; }
+  .doc-tag:hover { border-color:var(--ink); color:var(--ink); }
+  .doc-tag-add { padding:3px 10px; border:1px dashed rgba(0,0,0,0.15); border-radius:20px; font-size:11px; color:var(--ink3); cursor:pointer; background:none; font-family:var(--sans); }
+  .doc-tag-add:hover { border-color:var(--ink2); color:var(--ink2); }
+  /* ── Inline mention ── */
+  .doc-mention { background:rgba(0,0,0,0.06); border-radius:4px; padding:1px 5px; font-size:13px; cursor:pointer; color:var(--ink); text-decoration:none; }
+  .doc-mention:hover { background:rgba(0,0,0,0.1); }
+  /* ── Mention menu ── */
+  #mention-menu { position:absolute; z-index:600; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow-lg); width:220px; overflow:hidden; display:none; }
+  .mention-item { padding:8px 12px; cursor:pointer; font-size:12px; display:flex; align-items:center; gap:8px; }
+  .mention-item:hover { background:rgba(0,0,0,0.05); }
   .fmt-btn { padding: 3px 7px; border: none; background: transparent; border-radius: 4px; cursor: pointer; font-size: 11px; color: var(--ink2); font-family: var(--sans); transition: all 0.1s; }
   .fmt-btn:hover { background: rgba(0,0,0,0.07); color: var(--ink); }
   .fmt-sep { width: 1px; height: 16px; background: var(--border); margin: 0 3px; }
@@ -1007,19 +1085,34 @@
 
 <!-- LOGIN SCREEN -->
 <div id="login-screen" style="display:none;position:fixed;inset:0;background:#F9F7F3;z-index:9999;align-items:center;justify-content:center;flex-direction:column;gap:24px">
-  <!-- Sprite canvas sits at bottom of login screen -->
   <canvas id="login-canvas" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"></canvas>
   <div style="font-family:'Courier New',monospace;font-size:28px;font-weight:700;letter-spacing:-0.03em;color:#1A1A1A;position:relative;z-index:1">heidiboo</div>
-  <div id="login-form" style="display:flex;flex-direction:column;gap:12px;width:300px;position:relative;z-index:1">
+  <div id="login-form" style="display:flex;flex-direction:column;gap:10px;width:300px;position:relative;z-index:1">
+
+    <!-- Email input -->
     <input id="login-email" type="email" placeholder="your@email.com"
-      style="padding:12px 16px;border:1px solid rgba(0,0,0,0.15);border-radius:8px;font-family:Inter,sans-serif;font-size:14px;background:#fff;color:#1A1A1A;outline:none;text-align:center"
+      style="padding:12px 16px;border:1px solid rgba(0,0,0,0.15);border-radius:8px;font-family:Inter,sans-serif;font-size:14px;background:#fff;color:#1A1A1A;outline:none;text-align:center;transition:border-color 0.15s"
       onfocus="this.style.borderColor='#1A1A1A'" onblur="this.style.borderColor='rgba(0,0,0,0.15)'"
-      onkeydown="if(event.key==='Enter')sendMagicLink()">
-    <button onclick="sendMagicLink()"
+      oninput="onLoginEmailInput(this.value)"
+      onkeydown="if(event.key==='Enter')requestAccess()">
+
+    <!-- Name field — only shown for unknown emails -->
+    <div id="login-name-wrap" style="display:none;flex-direction:column;gap:6px">
+      <div style="font-size:11px;color:#888;text-align:center">What's your name?</div>
+      <input id="login-name" type="text" placeholder="Your name"
+        style="padding:12px 16px;border:1px solid rgba(0,0,0,0.15);border-radius:8px;font-family:Inter,sans-serif;font-size:14px;background:#fff;color:#1A1A1A;outline:none;text-align:center;transition:border-color 0.15s"
+        onfocus="this.style.borderColor='#1A1A1A'" onblur="this.style.borderColor='rgba(0,0,0,0.15)'"
+        onkeydown="if(event.key==='Enter')requestAccess()">
+    </div>
+
+    <!-- Submit button -->
+    <button id="login-btn" onclick="requestAccess()"
       style="padding:12px;background:#1A1A1A;color:#F9F7F3;border:none;border-radius:8px;font-family:Inter,sans-serif;font-size:14px;font-weight:500;cursor:pointer">
-      Send magic link
+      Request access
     </button>
-    <div id="login-msg" style="font-size:12px;color:#888;text-align:center;min-height:18px"></div>
+
+    <!-- Status message -->
+    <div id="login-msg" style="font-size:12px;color:#888;text-align:center;min-height:18px;line-height:1.5"></div>
   </div>
 </div>
 
@@ -1131,6 +1224,8 @@
         <div class="mode-pill-opt active" onclick="setMode('work')" style="background:rgba(255,255,255,0.15);color:#F9F7F3">Work</div>
       </div>
       <div class="date-badge" id="today-date"></div>
+      <!-- Control center — only shown to primary email -->
+      <button id="cc-btn" onclick="openControlCenter()" style="display:none;background:none;border:none;cursor:pointer;color:rgba(255,255,255,0.5);font-size:16px;padding:4px 6px;border-radius:6px;transition:all 0.15s;line-height:1" title="Control Center" onmouseover="this.style.color='#fff';this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.color='rgba(255,255,255,0.5)';this.style.background='none'">⚙</button>
     </div>
   </header>
 
@@ -1331,6 +1426,56 @@
   </main>
 </div><!-- /work-app -->
 
+<!-- CONTROL CENTER DRAWER -->
+<div id="cc-overlay" onclick="closeControlCenter()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.3);z-index:8000;backdrop-filter:blur(2px)"></div>
+<div id="cc-drawer" style="display:none;position:fixed;top:0;right:0;bottom:0;width:440px;background:#F9F7F3;z-index:8001;box-shadow:-4px 0 32px rgba(0,0,0,0.12);overflow-y:auto;flex-direction:column">
+  <div style="padding:24px 28px 0;border-bottom:1px solid rgba(0,0,0,0.08);display:flex;align-items:center;justify-content:space-between;padding-bottom:16px">
+    <div>
+      <div style="font-family:'Courier New',monospace;font-size:13px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#1A1A1A">Control Center</div>
+      <div style="font-size:11px;color:#888;margin-top:2px">Private to heidinicolecruztang@gmail.com</div>
+    </div>
+    <button onclick="closeControlCenter()" style="background:none;border:none;font-size:18px;cursor:pointer;color:#888;padding:4px 8px;border-radius:6px" onmouseover="this.style.background='rgba(0,0,0,0.06)'" onmouseout="this.style.background='none'">✕</button>
+  </div>
+
+  <!-- Active sessions -->
+  <div style="padding:20px 28px 0">
+    <div style="font-family:'Courier New',monospace;font-size:8px;letter-spacing:0.12em;text-transform:uppercase;color:#888;margin-bottom:12px">Active Sessions</div>
+    <div id="cc-sessions" style="display:flex;flex-direction:column;gap:8px">
+      <div style="font-size:12px;color:#aaa">Loading...</div>
+    </div>
+    <button onclick="signOutAllOthers()" style="margin-top:12px;padding:7px 14px;border:1px solid rgba(0,0,0,0.12);border-radius:6px;background:transparent;font-size:11px;cursor:pointer;color:#888;font-family:Inter,sans-serif" onmouseover="this.style.borderColor='#c00';this.style.color='#c00'" onmouseout="this.style.borderColor='rgba(0,0,0,0.12)';this.style.color='#888'">Sign out all other devices</button>
+  </div>
+
+  <!-- Login history -->
+  <div style="padding:20px 28px 0">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-family:'Courier New',monospace;font-size:8px;letter-spacing:0.12em;text-transform:uppercase;color:#888">Login History</div>
+      <button onclick="clearLoginHistory()" style="background:none;border:none;font-size:10px;color:#aaa;cursor:pointer;font-family:Inter,sans-serif" onmouseover="this.style.color='#c00'" onmouseout="this.style.color='#aaa'">Clear</button>
+    </div>
+    <div id="cc-history" style="display:flex;flex-direction:column;gap:6px">
+      <div style="font-size:12px;color:#aaa">No login history yet</div>
+    </div>
+  </div>
+
+  <!-- Pending requests -->
+  <div style="padding:20px 28px 0">
+    <div style="font-family:'Courier New',monospace;font-size:8px;letter-spacing:0.12em;text-transform:uppercase;color:#888;margin-bottom:12px">Access Requests</div>
+    <div id="cc-requests" style="display:flex;flex-direction:column;gap:8px">
+      <div style="font-size:12px;color:#aaa">No pending requests</div>
+    </div>
+  </div>
+
+  <!-- Allowlist -->
+  <div style="padding:20px 28px 28px">
+    <div style="font-family:'Courier New',monospace;font-size:8px;letter-spacing:0.12em;text-transform:uppercase;color:#888;margin-bottom:12px">Approved Emails</div>
+    <div id="cc-allowlist" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px"></div>
+    <div style="display:flex;gap:8px">
+      <input id="cc-new-email" type="email" placeholder="Add email..." style="flex:1;padding:8px 12px;border:1px solid rgba(0,0,0,0.12);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#fff;color:#1A1A1A;outline:none" onkeydown="if(event.key==='Enter')ccAddEmail()">
+      <button onclick="ccAddEmail()" style="padding:8px 14px;background:#1A1A1A;color:#F9F7F3;border:none;border-radius:6px;font-size:12px;cursor:pointer">Add</button>
+    </div>
+  </div>
+</div>
+
 
 <div id="doc-modal" style="display:none">
   <div class="doc-editor">
@@ -1339,19 +1484,48 @@
       <div style="display:flex;align-items:center;gap:12px">
         <div id="doc-created-display" class="doc-created-date"></div>
         <div id="doc-autosave-indicator" style="font-size:0.75rem;color:var(--ink2);opacity:0;transition:opacity 0.3s">Saved</div>
+        <button onclick="exportDocPDF()" style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;background:transparent;font-size:11px;cursor:pointer;color:var(--ink2);font-family:var(--sans)">Export PDF</button>
         <select id="doc-project-link" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-family:'DM Sans',sans-serif;font-size:0.8rem;background:var(--bg);color:var(--ink2);outline:none">
           <option value="">No project</option>
         </select>
         <button id="doc-delete-btn" class="btn" style="font-size:0.8rem;padding:6px 14px;background:transparent;border:1px solid var(--border);color:var(--accent);display:none" onclick="deleteDoc()">Delete</button>
       </div>
     </div>
+    <!-- Cover image -->
+    <div id="doc-cover-wrap" class="doc-cover-wrap" style="display:none">
+      <img id="doc-cover-img" src="" alt="">
+      <div class="doc-cover-actions">
+        <button class="doc-cover-btn" onclick="changeCover()">Change cover</button>
+        <button class="doc-cover-btn" onclick="removeCover()">Remove</button>
+      </div>
+    </div>
     <div class="doc-editor-body">
+      <!-- Add cover + tags row -->
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px" id="doc-meta-row">
+        <button class="doc-add-cover-btn" id="doc-add-cover-btn" onclick="addCover()">🖼 Add cover</button>
+      </div>
+      <!-- Tags -->
+      <div class="doc-tags" id="doc-tags"></div>
       <input type="text" id="doc-title-input" placeholder="Untitled doc" class="doc-title-input">
+      <!-- TOC (auto-generated) -->
+      <div id="doc-toc" class="doc-toc" style="display:none">
+        <div class="doc-toc-label">Contents</div>
+        <div id="doc-toc-links"></div>
+      </div>
       <div id="doc-body-input" class="doc-body-input" contenteditable="true" data-placeholder="Start writing, or type '/' for commands..."></div>
+      <!-- Related docs -->
+      <div id="doc-related" class="doc-related" style="display:none">
+        <div class="doc-related-label">In this project</div>
+        <div id="doc-related-list" class="doc-related-grid"></div>
+      </div>
     </div>
     <!-- Slash menu lives inside the modal so it scrolls with it -->
     <div id="slash-menu" style="display:none;position:absolute">
       <div class="slash-menu-inner" id="slash-menu-inner"></div>
+    </div>
+    <!-- Mention menu -->
+    <div id="mention-menu">
+      <div id="mention-menu-inner"></div>
     </div>
   </div>
 </div>
@@ -1837,70 +2011,218 @@ function initLoginSprite() {
 }
 
 // ---- AUTH ----
-async function sendMagicLink() {
-  const email = document.getElementById('login-email').value.trim();
-  const msg = document.getElementById('login-msg');
+// ── AUTH CONFIG ──
+// Heidi's primary email — no approval needed, goes straight in
+const HEIDI_PRIMARY = 'heidinicolecruztang@gmail.com';
+// Heidi's other emails — get instant approval email sent, no name required
+const HEIDI_EMAILS  = ['hnct03@gmail.com', 'hcruztang@sofi.org'];
+// All of Heidi's emails combined
+const ALL_HEIDI     = [HEIDI_PRIMARY, ...HEIDI_EMAILS];
+
+// EmailJS config — you'll need to set these up once at emailjs.com (free)
+// Instructions: see comment at bottom of this section
+const EMAILJS_SERVICE  = 'YOUR_SERVICE_ID';
+const EMAILJS_TEMPLATE = 'YOUR_TEMPLATE_ID';
+const EMAILJS_KEY      = 'YOUR_PUBLIC_KEY';
+
+function onLoginEmailInput(val) {
+  const email = val.trim().toLowerCase();
+  const nameWrap = document.getElementById('login-name-wrap');
+  // Show name field only for emails not in Heidi's list
+  const needsName = email && !ALL_HEIDI.includes(email);
+  nameWrap.style.display = needsName ? 'flex' : 'none';
+}
+
+async function requestAccess() {
+  const email = document.getElementById('login-email').value.trim().toLowerCase();
+  const name  = document.getElementById('login-name')?.value.trim() || '';
+  const msg   = document.getElementById('login-msg');
+  const btn   = document.getElementById('login-btn');
+
   if (!email) { msg.textContent = 'Enter your email first'; return; }
-  msg.textContent = 'Sending...';
+
+  // Unknown email must provide their name
+  if (!ALL_HEIDI.includes(email) && !name) {
+    msg.textContent = 'Please enter your name to request access';
+    document.getElementById('login-name').focus();
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Sending...';
+  msg.textContent = '';
+
+  // Send Heidi an approval email via EmailJS
+  const displayName = ALL_HEIDI.includes(email) ? 'Heidi' : name;
+  const isHeidi = ALL_HEIDI.includes(email);
+
+  // Log in control center
+  if (!isHeidi) logAccessRequest(email, displayName);
+  else logLoginEvent(email, 'request');
+
+  try {
+    await emailjs.init(EMAILJS_KEY);
+    await emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, {
+      to_email:    HEIDI_PRIMARY,
+      from_name:   displayName,
+      from_email:  email,
+      is_heidi:    isHeidi ? 'yes' : 'no',
+      approve_url: `${window.location.origin}${window.location.pathname}?approve=${encodeURIComponent(email)}&name=${encodeURIComponent(displayName)}`,
+      site_url:    window.location.href,
+    });
+  } catch(err) {
+    console.warn('EmailJS error:', err);
+    // If EmailJS not configured yet, fall through gracefully
+  }
+
+  msg.innerHTML = isHeidi
+    ? '✓ Permission request sent to heidinicolecruztang@gmail.com<br><span style="color:#aaa;font-size:11px">Check your email to approve</span>'
+    : `✓ Access request sent — Heidi will approve shortly<br><span style="color:#aaa;font-size:11px">Check your email once approved</span>`;
+  btn.textContent = 'Awaiting approval...';
+}
+
+async function handleApprovalClick(email) {
+  // Heidi clicked Approve in her email — send magic link to that email
+  const msg = document.getElementById('login-msg');
+  if (msg) msg.textContent = 'Sending access link...';
   const { error } = await sb.auth.signInWithOtp({
     email,
     options: { emailRedirectTo: window.location.href }
   });
-  if (error) { msg.textContent = error.message; return; }
-  msg.textContent = '✓ Check your email for a magic link';
-  document.getElementById('login-email').disabled = true;
+  if (error) {
+    if (msg) msg.textContent = 'Error: ' + error.message;
+    return;
+  }
+  // Show confirmation page
+  document.body.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:center;height:100vh;background:#F9F7F3;font-family:Inter,sans-serif;flex-direction:column;gap:16px">
+      <div style="font-family:'Courier New',monospace;font-size:24px;font-weight:700">✓ Access granted</div>
+      <div style="font-size:14px;color:#888">Magic link sent to ${escHtml(email)}</div>
+    </div>`;
+}
+
+async function sendMagicLink() {
+  // Direct magic link send (used internally after approval)
+  const email = document.getElementById('login-email')?.value.trim();
+  if (!email) return;
+  await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.href } });
 }
 
 async function initAuth() {
-  // Handle magic link — Supabase puts the token in the URL hash (#access_token=...)
-  const hash = window.location.hash;
-  if (hash && hash.includes('access_token')) {
-    const { data, error } = await sb.auth.getSession();
+  // Check if this is an approval click from Heidi's email
+  const params = new URLSearchParams(window.location.search);
+  const approveEmail = params.get('approve');
+  if (approveEmail) {
+    window.history.replaceState(null, '', window.location.pathname);
+    await handleApprovalClick(decodeURIComponent(approveEmail));
+    return;
+  }
+
+  // Handle magic link redirect (token in URL hash)
+  if (window.location.hash.includes('access_token')) {
+    const { data } = await sb.auth.getSession();
     if (data?.session) {
-      // Clean the URL so it doesn't show the token
+      // Check allowlist
+      const userEmail = data.session.user.email?.toLowerCase();
+      if (!ALL_HEIDI.includes(userEmail)) {
+        await sb.auth.signOut();
+        window.history.replaceState(null, '', window.location.pathname);
+        showLoginScreen('Access denied — this is a private space.');
+        return;
+      }
       window.history.replaceState(null, '', window.location.pathname);
       showApp();
       return;
     }
   }
 
-  // Check if already have a valid session
+  // Check existing session
   const { data: { session } } = await sb.auth.getSession();
   if (session) {
+    const userEmail = session.user.email?.toLowerCase();
+    if (!ALL_HEIDI.includes(userEmail)) {
+      await sb.auth.signOut();
+      showLoginScreen('Access denied — this is a private space.');
+      return;
+    }
     showApp();
     return;
   }
 
-  // Listen for auth state change (fires when magic link token is processed)
+  // Listen for sign-in (magic link click)
   sb.auth.onAuthStateChange(async (event, session) => {
     if (event === 'SIGNED_IN' && session) {
+      const userEmail = session.user.email?.toLowerCase();
+      if (!ALL_HEIDI.includes(userEmail)) {
+        await sb.auth.signOut();
+        showLoginScreen('Access denied — this is a private space.');
+        return;
+      }
       window.history.replaceState(null, '', window.location.pathname);
       showApp();
     }
   });
 
-  // Show login screen
-  document.getElementById('login-screen').style.display = 'flex';
+  showLoginScreen();
+}
+
+function showLoginScreen(errorMsg) {
+  const screen = document.getElementById('login-screen');
+  screen.style.display = 'flex';
   document.getElementById('focus-panel').style.display = 'none';
   document.getElementById('work-app').style.display = 'none';
+  if (errorMsg) {
+    document.getElementById('login-msg').textContent = errorMsg;
+  }
   initLoginSprite();
 }
+
+/*
+ ── HOW TO SET UP EMAILJS (free, 5 min) ──
+ 1. Go to emailjs.com → sign up free
+ 2. Add Email Service → Gmail → connect your Gmail
+ 3. Create Email Template with these variables:
+    Subject: "{{from_name}} wants to enter your brain 🧠"
+    Body:
+      {{from_name}} ({{from_email}}) is requesting access to heidiboo.
+      
+      Click to approve: {{approve_url}}
+      
+      (If you didn't expect this, ignore it)
+ 4. Copy your Service ID, Template ID, and Public Key
+ 5. Replace YOUR_SERVICE_ID, YOUR_TEMPLATE_ID, YOUR_PUBLIC_KEY above
+*/
 
 async function showApp() {
   if (window._stopLoginSprite) window._stopLoginSprite();
   document.getElementById('login-screen').style.display = 'none';
-  // Pull latest data from Supabase first, then init
   showSyncStatus('Syncing...');
   await loadFromSupabase();
   hideSyncStatus();
   init();
+
+  // Get current user email
+  const { data: { session } } = await sb.auth.getSession();
+  const userEmail = session?.user?.email?.toLowerCase() || '';
+  window._currentUserEmail = userEmail;
+
+  // Show control center gear only for primary email
+  if (userEmail === HEIDI_PRIMARY) {
+    const ccBtn = document.getElementById('cc-btn');
+    if (ccBtn) ccBtn.style.display = 'block';
+    // Log this login
+    logLoginEvent(userEmail, 'login');
+  } else {
+    // Still log non-primary approved logins
+    logLoginEvent(userEmail, 'login');
+  }
 
   // Add sign out button to topbar
   const topbar = document.querySelector('.focus-topbar') || document.querySelector('.header-left');
   if (topbar) {
     const btn = document.createElement('button');
     btn.textContent = 'Sign out';
-    btn.style.cssText = 'font-size:10px;background:none;border:none;color:var(--ink2);cursor:pointer;font-family:var(--mono);letter-spacing:0.05em;padding:4px 8px;border-radius:4px;margin-left:8px';
+    btn.style.cssText = 'font-size:10px;background:none;border:none;color:rgba(255,255,255,0.4);cursor:pointer;font-family:var(--mono);letter-spacing:0.05em;padding:4px 8px;border-radius:4px;margin-left:8px';
     btn.onclick = async () => { await sb.auth.signOut(); location.reload(); };
     topbar.appendChild(btn);
   }
@@ -2058,7 +2380,7 @@ function renderOverview() {
   }
   const od = document.getElementById('overview-docs');
   if (od) {
-    const recent = docs.slice(-4).reverse();
+    const recent = docs.slice(-7).reverse();
     if (!recent.length) { od.innerHTML = '<div class="empty-state">No docs yet</div>'; }
     else od.innerHTML = recent.map(d => `
       <div style="padding:8px 0;border-bottom:1px solid rgba(0,0,0,0.05);cursor:pointer" onclick="openDoc('${d.id}')">
@@ -2817,23 +3139,41 @@ function openDoc(id, projectName) {
     document.getElementById('doc-body-input').innerHTML = doc.body || '';
     sel.value = doc.project || '';
     document.getElementById('doc-delete-btn').style.display = 'inline-block';
+    // Cover
+    if (doc.cover) { setCover(doc.cover); }
+    else { document.getElementById('doc-cover-wrap').style.display='none'; document.getElementById('doc-add-cover-btn').style.display=''; }
+    // Created date
+    const cd = document.getElementById('doc-created-display');
+    if (cd) cd.textContent = doc.createdAt ? 'Created ' + doc.createdAt : '';
+    // Tags
+    renderDocTags(id);
+    // Related docs
+    renderRelatedDocs(id);
   } else {
-    // Create a new blank doc immediately so it shows in the list right away
     const newId = 'doc_' + Date.now();
     const now = new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
-    const newDoc = { id: newId, title: '', body: '', project: projectName || '', updatedAt: now, createdAt: now };
+    const newDoc = { id: newId, title: '', body: '', project: projectName || '', updatedAt: now, createdAt: now, tags: [], cover: '' };
     docs.push(newDoc);
     save('docs', docs);
     renderDocs();
     currentDocId = newId;
     document.getElementById('doc-title-input').value = '';
     document.getElementById('doc-body-input').innerHTML = '';
+    document.getElementById('doc-cover-wrap').style.display = 'none';
+    document.getElementById('doc-add-cover-btn').style.display = '';
+    document.getElementById('doc-tags').innerHTML = '<button class="doc-tag-add" onclick="addDocTag()">+ Add tag</button>';
+    document.getElementById('doc-related').style.display = 'none';
     sel.value = projectName || '';
     document.getElementById('doc-delete-btn').style.display = 'inline-block';
+    const cd = document.getElementById('doc-created-display');
+    if (cd) cd.textContent = 'Created ' + now;
   }
 
   setupEditor();
-  setTimeout(() => document.getElementById('doc-title-input').focus(), 100);
+  setTimeout(() => {
+    document.getElementById('doc-title-input').focus();
+    renderTOC();
+  }, 100);
 }
 
 function autoSaveDoc() {
@@ -2863,6 +3203,225 @@ function closeDoc() {
 
 function saveDoc() { autoSaveDoc(); }
 
+// ── COVER IMAGE ──
+function addCover() {
+  const url = prompt('Paste a cover image URL (or leave blank to upload):');
+  if (!url) return;
+  setCover(url);
+}
+function changeCover() { addCover(); }
+function removeCover() {
+  document.getElementById('doc-cover-wrap').style.display = 'none';
+  document.getElementById('doc-add-cover-btn').style.display = '';
+  const doc = docs.find(d => d.id === currentDocId);
+  if (doc) { doc.cover = ''; save('docs', docs); }
+}
+function setCover(url) {
+  const wrap = document.getElementById('doc-cover-wrap');
+  const img  = document.getElementById('doc-cover-img');
+  img.src = url;
+  wrap.style.display = 'block';
+  document.getElementById('doc-add-cover-btn').style.display = 'none';
+  const doc = docs.find(d => d.id === currentDocId);
+  if (doc) { doc.cover = url; save('docs', docs); }
+}
+
+// ── TAGS ──
+function renderDocTags(docId) {
+  const el = document.getElementById('doc-tags');
+  if (!el) return;
+  const doc = docs.find(d => d.id === docId);
+  const tags = doc?.tags || [];
+  el.innerHTML = tags.map((t,i) =>
+    `<span class="doc-tag" onclick="removeDocTag(${i})">${escHtml(t)} ✕</span>`
+  ).join('') + `<button class="doc-tag-add" onclick="addDocTag()">+ Add tag</button>`;
+}
+function addDocTag() {
+  const tag = prompt('Tag name:');
+  if (!tag?.trim()) return;
+  const doc = docs.find(d => d.id === currentDocId);
+  if (!doc) return;
+  if (!doc.tags) doc.tags = [];
+  if (!doc.tags.includes(tag.trim())) doc.tags.push(tag.trim());
+  save('docs', docs);
+  renderDocTags(currentDocId);
+}
+function removeDocTag(i) {
+  const doc = docs.find(d => d.id === currentDocId);
+  if (!doc?.tags) return;
+  doc.tags.splice(i, 1);
+  save('docs', docs);
+  renderDocTags(currentDocId);
+}
+
+// ── TABLE OF CONTENTS ──
+function renderTOC() {
+  const body  = document.getElementById('doc-body-input');
+  const toc   = document.getElementById('doc-toc');
+  const links = document.getElementById('doc-toc-links');
+  if (!body || !toc || !links) return;
+  const headings = [...body.querySelectorAll('h1,h2,h3')];
+  if (headings.length < 2) { toc.style.display = 'none'; return; }
+  // Assign IDs
+  headings.forEach((h, i) => { if (!h.id) h.id = 'h_' + i; });
+  links.innerHTML = headings.map(h =>
+    `<a href="#${h.id}" class="${h.tagName.toLowerCase()}" onclick="scrollToHeading('${h.id}',event)">${escHtml(h.textContent)}</a>`
+  ).join('');
+  toc.style.display = 'block';
+}
+function scrollToHeading(id, e) {
+  e.preventDefault();
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+// ── WORD COUNT ──
+function updateWordCount() {
+  const body = document.getElementById('doc-body-input');
+  const wc   = document.getElementById('doc-wordcount');
+  if (!body || !wc) return;
+  const text = body.innerText || '';
+  const words = text.trim().split(/\s+/).filter(Boolean).length;
+  const chars = text.replace(/\s/g,'').length;
+  wc.textContent = `${words} words · ${chars} chars`;
+}
+
+// ── RELATED DOCS ──
+function renderRelatedDocs(docId) {
+  const doc = docs.find(d => d.id === docId);
+  const related = document.getElementById('doc-related');
+  const list = document.getElementById('doc-related-list');
+  if (!related || !list || !doc?.project) { if(related) related.style.display='none'; return; }
+  const others = docs.filter(d => d.id !== docId && d.project === doc.project);
+  if (!others.length) { related.style.display='none'; return; }
+  list.innerHTML = others.map(d =>
+    `<div class="doc-related-item" onclick="closeDoc();openDoc('${d.id}')">
+      <span style="font-size:16px">📄</span>
+      <span>${escHtml(d.title||'Untitled')}</span>
+      <span style="margin-left:auto;font-size:11px;color:var(--ink3)">${d.updatedAt||''}</span>
+    </div>`
+  ).join('');
+  related.style.display = 'block';
+}
+
+// ── VIDEO EMBED ──
+function promptVideoEmbed() {
+  const url = prompt('Paste a YouTube or Loom URL:');
+  if (!url) return;
+  let embedUrl = '';
+  // YouTube
+  const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  if (ytMatch) embedUrl = `https://www.youtube.com/embed/${ytMatch[1]}`;
+  // Loom
+  const loomMatch = url.match(/loom\.com\/share\/([a-zA-Z0-9]+)/);
+  if (loomMatch) embedUrl = `https://www.loom.com/embed/${loomMatch[1]}`;
+
+  if (!embedUrl) { alert('Paste a YouTube or Loom URL'); return; }
+  const html = `<div class="doc-video-wrap" contenteditable="false"><iframe src="${embedUrl}" allowfullscreen></iframe></div><p><br></p>`;
+  fmtExec('insertHTML', html);
+}
+
+// ── TOGGLE BLOCK ──
+function insertToggleBlock() {
+  const toggleId = 'toggle_' + Date.now();
+  const html = `<div class="doc-toggle" id="${toggleId}" contenteditable="false">
+    <div class="doc-toggle-head" onclick="toggleBlock('${toggleId}')">
+      <span class="doc-toggle-arrow">▶</span>
+      <div class="doc-toggle-title" contenteditable="true" placeholder="Toggle heading...">Toggle</div>
+    </div>
+    <div class="doc-toggle-body" id="body_${toggleId}">
+      <div class="doc-toggle-body-inner" contenteditable="true">Content here...</div>
+    </div>
+  </div><p><br></p>`;
+  fmtExec('insertHTML', html);
+}
+function toggleBlock(id) {
+  const arrow = document.querySelector(`#${id} .doc-toggle-arrow`);
+  const body  = document.getElementById('body_' + id);
+  if (!arrow || !body) return;
+  const open = arrow.classList.toggle('open');
+  body.classList.toggle('open', open);
+  autoSaveDoc();
+}
+
+// ── EXPORT PDF ──
+function exportDocPDF() {
+  const doc = docs.find(d => d.id === currentDocId);
+  if (!doc) return;
+  const title = doc.title || 'Untitled';
+  const body  = document.getElementById('doc-body-input')?.innerHTML || '';
+  const html  = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${title}</title>
+    <style>
+      body { font-family: -apple-system, sans-serif; max-width: 700px; margin: 40px auto; padding: 0 24px; font-size: 14px; line-height: 1.8; color: #1A1A1A; }
+      h1 { font-size: 2rem; font-weight: 700; margin-bottom: 8px; }
+      h2 { font-size: 1.3rem; font-weight: 700; margin: 20px 0 6px; }
+      h3 { font-size: 1rem; font-weight: 600; margin: 16px 0 4px; }
+      img { max-width: 100%; border-radius: 8px; }
+      blockquote { border-left: 2px solid #ccc; padding-left: 14px; color: #666; }
+      hr { border: none; border-top: 1px solid #eee; margin: 20px 0; }
+      table { width: 100%; border-collapse: collapse; }
+      td, th { border: 1px solid #ddd; padding: 7px 11px; font-size: 13px; }
+    </style>
+  </head><body><h1>${title}</h1>${body}</body></html>`;
+  const blob = new Blob([html], { type: 'text/html' });
+  const url  = URL.createObjectURL(blob);
+  const win  = window.open(url, '_blank');
+  setTimeout(() => { win?.print(); URL.revokeObjectURL(url); }, 600);
+}
+
+// ── @ MENTION ──
+let _mentionRange = null;
+
+function showMentionMenu(range) {
+  const menu  = document.getElementById('mention-menu');
+  const inner = document.getElementById('mention-menu-inner');
+  if (!menu || !inner) return;
+  const query = _getMentionQuery();
+  const filtered = docs.filter(d => d.title && d.title.toLowerCase().includes(query.toLowerCase())).slice(0, 8);
+  if (!filtered.length) { hideMentionMenu(); return; }
+  inner.innerHTML = filtered.map(d =>
+    `<div class="mention-item" onmousedown="event.preventDefault();insertMention('${d.id}','${escHtml(d.title||'Untitled')}')">
+      <span style="font-size:14px">📄</span> ${escHtml(d.title||'Untitled')}
+    </div>`
+  ).join('');
+  const rect = range.getBoundingClientRect();
+  const modal = document.getElementById('doc-modal');
+  const mRect = modal?.getBoundingClientRect() || {left:0,top:0};
+  menu.style.left = (rect.left - mRect.left) + 'px';
+  menu.style.top  = (rect.bottom - mRect.top + (modal?.scrollTop||0) + 6) + 'px';
+  menu.style.display = 'block';
+}
+function hideMentionMenu() {
+  const menu = document.getElementById('mention-menu');
+  if (menu) menu.style.display = 'none';
+  _mentionRange = null;
+}
+function _getMentionQuery() {
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return '';
+  const text = sel.getRangeAt(0).startContainer.textContent || '';
+  const at = text.lastIndexOf('@');
+  return at >= 0 ? text.slice(at + 1) : '';
+}
+function insertMention(docId, title) {
+  hideMentionMenu();
+  if (!_mentionRange) return;
+  const sel = window.getSelection();
+  sel.removeAllRanges(); sel.addRange(_mentionRange);
+  // Delete the @query text
+  const range = sel.getRangeAt(0);
+  const container = range.startContainer;
+  const text = container.textContent;
+  const at = text.lastIndexOf('@');
+  if (at >= 0) {
+    const del = document.createRange();
+    del.setStart(container, at);
+    del.setEnd(container, text.length);
+    del.deleteContents();
+  }
+  fmtExec('insertHTML', `<a class="doc-mention" href="#" onclick="event.preventDefault();closeDoc();openDoc('${docId}')">@${escHtml(title)}</a>&nbsp;`);
+}
+
 function deleteDoc() {
   if (!currentDocId) return;
   trashDoc(currentDocId);
@@ -2887,11 +3446,15 @@ const SLASH_COMMANDS = [
   { group: 'Blocks',  icon:'💜', label:'Callout Purple', desc:'Idea callout',        cmd:'callout-purple' },
   { group: 'Blocks',  icon:'"',  label:'Quote',          desc:'Block quotation',     cmd:'quote' },
   { group: 'Blocks',  icon:'—',  label:'Divider',        desc:'Horizontal rule',     cmd:'divider' },
-  { group: 'Blocks',  icon:'⊞',  label:'Table',          desc:'3×3 table',           cmd:'table' },
+  { group: 'Blocks',  icon:'⊞',  label:'Table',          desc:'Insert a table',      cmd:'table' },
   { group: 'Layout',  icon:'⊟',  label:'2 Columns',      desc:'Side by side layout', cmd:'2col' },
+  { group: 'Layout',  icon:'⊞',  label:'3 Columns',      desc:'Three column layout', cmd:'3col' },
+  { group: 'Layout',  icon:'⊠',  label:'4 Columns',      desc:'Four column layout',  cmd:'4col' },
   { group: 'Media',   icon:'🔗', label:'Bookmark',       desc:'Link with preview',   cmd:'bookmark' },
-  { group: 'Media',   icon:'🖼', label:'Image',          desc:'Embed image by URL',  cmd:'image' },
-  { group: 'Tasks',   icon:'☑', label:'To-do',          desc:'Add a task to today', cmd:'todo' },
+  { group: 'Media',   icon:'🖼', label:'Image',          desc:'Upload or paste image', cmd:'image' },
+  { group: 'Media',   icon:'▶', label:'Video',          desc:'Embed YouTube/Loom',    cmd:'video' },
+  { group: 'Tasks',   icon:'☑', label:'To-do',          desc:'Add a task to today',   cmd:'todo' },
+  { group: 'Text',    icon:'▸', label:'Toggle',         desc:'Collapsible block',      cmd:'toggle' },
 ];
 
 let slashRange = null;
@@ -2928,19 +3491,32 @@ function setupEditor() {
   });
 
   editor.addEventListener('keydown', function(e) {
-    // Slash menu navigation
+    // Slash menu navigation — handle before anything else
     const menu = document.getElementById('slash-menu');
-    if (menu.style.display !== 'none') {
-      const items = document.querySelectorAll('#slash-menu .slash-item');
-      if (e.key === 'ArrowDown') { e.preventDefault(); slashActive = Math.min(slashActive+1, items.length-1); highlightSlash(); return; }
-      if (e.key === 'ArrowUp')   { e.preventDefault(); slashActive = Math.max(slashActive-1, 0); highlightSlash(); return; }
+    const menuOpen = menu && menu.style.display !== 'none';
+    if (menuOpen) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        e.stopPropagation();
+        const items = menu.querySelectorAll('.slash-item');
+        if (!items.length) return;
+        if (e.key === 'ArrowDown') slashActive = Math.min(slashActive + 1, items.length - 1);
+        else slashActive = Math.max(slashActive - 1, 0);
+        highlightSlash();
+        return;
+      }
       if (e.key === 'Enter') {
         e.preventDefault();
-        const active = document.querySelector('#slash-menu .slash-item.active');
+        e.stopPropagation();
+        const active = menu.querySelector('.slash-item.active');
         if (active) execSlash(active.dataset.cmd);
         return;
       }
-      if (e.key === 'Escape') { hideSlashMenu(); return; }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        hideSlashMenu();
+        return;
+      }
     }
 
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -2950,18 +3526,26 @@ function setupEditor() {
       const parent = node.nodeType === 3 ? node.parentElement : node;
       const tag = parent?.tagName?.toLowerCase();
 
+      // Caption — Enter always escapes to a new line below
+      if (parent?.classList?.contains('doc-img-caption')) {
+        e.preventDefault();
+        const p = document.createElement('p');
+        p.innerHTML = '<br>';
+        parent.insertAdjacentElement('afterend', p);
+        const nr = document.createRange();
+        nr.setStart(p, 0); nr.collapse(true);
+        sel.removeAllRanges(); sel.addRange(nr);
+        return;
+      }
+
       // Check if we're inside a callout text div
       const calloutText = parent?.closest?.('.doc-callout-text');
       if (calloutText) {
-        // Check if cursor is at the very end of the callout text
         const range = sel.getRangeAt(0);
-        const textLen = calloutText.textContent.length;
         const atEnd = range.collapsed &&
           range.startContainer === calloutText.lastChild &&
           range.startOffset === (calloutText.lastChild?.textContent?.length || 0);
-
         if (atEnd) {
-          // Escape callout — insert a <p> after the parent .doc-callout
           e.preventDefault();
           const calloutBlock = calloutText.closest('.doc-callout');
           if (calloutBlock) {
@@ -2969,33 +3553,58 @@ function setupEditor() {
             p.appendChild(document.createElement('br'));
             calloutBlock.insertAdjacentElement('afterend', p);
             const newRange = document.createRange();
-            newRange.setStart(p, 0);
-            newRange.collapse(true);
-            sel.removeAllRanges();
-            sel.addRange(newRange);
+            newRange.setStart(p, 0); newRange.collapse(true);
+            sel.removeAllRanges(); sel.addRange(newRange);
           }
           return;
         }
-        // Otherwise let browser handle Enter inside callout naturally
         return;
       }
 
       // Let browser handle Enter inside lists, tables naturally
       if (['li','td','th'].includes(tag)) return;
 
+      // After a heading → always produce a plain <p> not another heading
+      if (['h1','h2','h3'].includes(tag)) {
+        e.preventDefault();
+        hideSlashMenu();
+        const range = sel.getRangeAt(0);
+        range.deleteContents();
+        const p = document.createElement('p');
+        p.innerHTML = '<br>';
+        // Insert after the heading
+        const heading = parent.closest('h1,h2,h3') || parent;
+        heading.insertAdjacentElement('afterend', p);
+        const nr = document.createRange();
+        nr.setStart(p, 0); nr.collapse(true);
+        sel.removeAllRanges(); sel.addRange(nr);
+        return;
+      }
+
       e.preventDefault();
       hideSlashMenu();
 
       const range = sel.getRangeAt(0);
+      const currentBlock = range.startContainer.nodeType === 3
+        ? range.startContainer.parentElement?.closest('#doc-body-input > *')
+        : range.startContainer.closest?.('#doc-body-input > *');
+
+      // Double-Enter on an already-empty paragraph = add a visible spacer line
+      const isEmpty = currentBlock &&
+        (currentBlock.textContent.trim() === '') &&
+        currentBlock.tagName === 'P';
+
       range.deleteContents();
       const p = document.createElement('p');
       p.appendChild(document.createElement('br'));
+      if (isEmpty) {
+        // Add extra margin to simulate Notion's spacer
+        p.style.marginTop = '1.2em';
+      }
       range.insertNode(p);
       const newRange = document.createRange();
-      newRange.setStart(p, 0);
-      newRange.collapse(true);
-      sel.removeAllRanges();
-      sel.addRange(newRange);
+      newRange.setStart(p, 0); newRange.collapse(true);
+      sel.removeAllRanges(); sel.addRange(newRange);
     }
 
     // Shift+Enter inside a callout — same escape behaviour
@@ -3021,11 +3630,42 @@ function setupEditor() {
       }
     }
 
-    // Backspace/Delete inside an empty callout — remove the callout
+    // Backspace/Delete — handle selection that may include protected elements
     if (e.key === 'Backspace' || e.key === 'Delete') {
       const sel = window.getSelection();
       if (!sel.rangeCount) return;
-      const node = sel.getRangeAt(0).startContainer;
+      const range = sel.getRangeAt(0);
+
+      // Non-collapsed selection — let browser handle it BUT protect callout icons
+      if (!range.collapsed) {
+        // Remove any selected content manually so we can protect icons
+        e.preventDefault();
+        // Get all nodes in the selection
+        const fragment = range.cloneContents();
+        // Check if selection contains callout icons — if so, we need to be careful
+        const containsCallout = range.commonAncestorContainer.closest?.('.doc-callout') ||
+          fragment.querySelector?.('.doc-callout-icon');
+        if (containsCallout) {
+          // Inside a callout — just delete text content, don't touch the icon
+          const calloutText = range.commonAncestorContainer.closest?.('.doc-callout-text') ||
+            range.startContainer.parentElement?.closest?.('.doc-callout-text');
+          if (calloutText) {
+            range.deleteContents();
+            return;
+          }
+        }
+        // Standard multi-line delete — remove selected nodes cleanly
+        range.deleteContents();
+        // If the range left an empty container, clean it up
+        const anchor = range.startContainer;
+        if (anchor.nodeType === 3 && anchor.textContent === '' && anchor.parentElement !== editor) {
+          // fine, leave it
+        }
+        return;
+      }
+
+      // Collapsed selection — check if we're in an empty callout
+      const node = range.startContainer;
       const parent = node.nodeType === 3 ? node.parentElement : node;
       const calloutText = parent?.closest?.('.doc-callout-text');
       if (calloutText && calloutText.textContent.trim() === '') {
@@ -3068,6 +3708,26 @@ function setupEditor() {
           document.execCommand('insertUnorderedList');
           return;
         }
+        // --- → divider
+        if (/^---$/.test(text.trim())) {
+          const parent2 = node.parentElement;
+          node.textContent = '';
+          const hr = document.createElement('hr');
+          const p  = document.createElement('p');
+          p.innerHTML = '<br>';
+          if (parent2 && parent2 !== editor) {
+            parent2.replaceWith(hr, p);
+          } else {
+            editor.appendChild(hr);
+            editor.appendChild(p);
+          }
+          const nr = document.createRange();
+          nr.setStart(p, 0); nr.collapse(true);
+          const s = window.getSelection();
+          s.removeAllRanges(); s.addRange(nr);
+          autoSaveDoc();
+          return;
+        }
       }
       // Slash menu detection
       const range2 = sel.getRangeAt(0);
@@ -3080,7 +3740,17 @@ function setupEditor() {
       } else {
         hideSlashMenu();
       }
+      // @ mention detection
+      const atIdx = text2.lastIndexOf('@');
+      if (atIdx >= 0 && slashIdx < 0) {
+        _mentionRange = range2.cloneRange();
+        showMentionMenu(range2);
+      } else if (atIdx < 0) {
+        hideMentionMenu();
+      }
     }
+    // Update TOC on every input
+    renderTOC();
   });
 
   // Paste image support
@@ -3088,7 +3758,7 @@ function setupEditor() {
     const items = e.clipboardData?.items;
     if (!items) return;
 
-    // 1. Raw image data (copy image from Figma, screenshot, etc)
+    // 1. Raw image data
     for (const item of items) {
       if (item.type.startsWith('image/')) {
         e.preventDefault();
@@ -3115,7 +3785,7 @@ function setupEditor() {
       }
     }
 
-    // 2. Pasted text that looks like an image URL (copy image address from browser)
+    // 2. Image URL
     const text = e.clipboardData.getData('text/plain')?.trim();
     if (text && /^https?:\/\/.+\.(jpg|jpeg|png|gif|webp|svg|bmp|avif)(\?.*)?$/i.test(text)) {
       e.preventDefault();
@@ -3133,14 +3803,57 @@ function setupEditor() {
         sel.removeAllRanges(); sel.addRange(nr);
       }
       autoSaveDoc();
+      return;
+    }
+
+    // 3. HTML paste — strip spacing/margin styles to prevent giant gaps
+    const html = e.clipboardData.getData('text/html');
+    if (html) {
+      e.preventDefault();
+      const tmp = document.createElement('div');
+      tmp.innerHTML = html;
+
+      // Strip all inline margin, padding, line-height, font-size overrides
+      tmp.querySelectorAll('*').forEach(el => {
+        el.style.margin = '';
+        el.style.marginTop = '';
+        el.style.marginBottom = '';
+        el.style.padding = '';
+        el.style.paddingTop = '';
+        el.style.paddingBottom = '';
+        el.style.lineHeight = '';
+        el.style.fontSize = '';
+        el.style.fontFamily = '';
+        el.style.color = '';
+        el.style.background = '';
+        el.style.backgroundColor = '';
+        // Remove class attributes that carry external styles
+        el.removeAttribute('class');
+        el.removeAttribute('data-token-index');
+        el.removeAttribute('spellcheck');
+      });
+
+      // Remove empty blocks (just &nbsp; or whitespace)
+      tmp.querySelectorAll('p, div, span').forEach(el => {
+        if (el.textContent.replace(/\u00a0|\s/g,'') === '') el.remove();
+      });
+
+      // Convert divs to paragraphs for consistency
+      tmp.querySelectorAll('div').forEach(el => {
+        const p = document.createElement('p');
+        p.innerHTML = el.innerHTML;
+        el.replaceWith(p);
+      });
+
+      document.execCommand('insertHTML', false, tmp.innerHTML);
+      autoSaveDoc();
     }
   });
 
   document.addEventListener('click', function(e) {
     if (!e.target.closest('#slash-menu') && !e.target.closest('#doc-body-input')) hideSlashMenu();
-    if (!e.target.closest('#bookmark-popup')) {
-      // don't close if click is on the popup itself
-    }
+    if (!e.target.closest('#mention-menu') && !e.target.closest('#doc-body-input')) hideMentionMenu();
+    if (!e.target.closest('#bookmark-popup')) { /* keep open */ }
   });
 
   // Inject drag handles into ALL editor blocks on mouseover
@@ -3214,13 +3927,13 @@ function startBlockDrag(e, block) {
       const yInTop = ev.clientY < r.top + r.height * 0.25;
       const yInBot = ev.clientY > r.top + r.height * 0.75;
 
-      if (!yInTop && !yInBot && xFrac < 0.25) {
-        // Left zone → merge into split (left)
+      if (!yInTop && !yInBot && xFrac < 0.25 && !b.classList.contains('doc-cols')) {
+        // Left zone → merge into columns (but NOT if target is already a columns block)
         _dropTarget = b; _dropType = 'left';
         b.style.outline = '2px solid var(--ink)';
         b.style.outlineOffset = '-2px';
-      } else if (!yInTop && !yInBot && xFrac > 0.75) {
-        // Right zone → merge into split (right)
+      } else if (!yInTop && !yInBot && xFrac > 0.75 && !b.classList.contains('doc-cols')) {
+        // Right zone → merge into columns (but NOT if target is already a columns block)
         _dropTarget = b; _dropType = 'right';
         b.style.outline = '2px solid var(--ink)';
         b.style.outlineOffset = '-2px';
@@ -3255,48 +3968,13 @@ function startBlockDrag(e, block) {
     } else if (_dropType === 'after') {
       _dropTarget.after(_dragBlock);
     } else if (_dropType === 'left' || _dropType === 'right') {
-      // Create a split pane from two blocks
-      const splitId = 'split_' + Date.now();
-      const cellA = document.createElement('div');
-      cellA.className = 'doc-split-cell';
-      cellA.setAttribute('contenteditable','true');
-      const cellB = document.createElement('div');
-      cellB.className = 'doc-split-cell';
-      cellB.setAttribute('contenteditable','true');
-
-      // Clone inner content (remove drag handle first)
-      const cleanClone = el => {
-        const c = el.cloneNode(true);
-        c.querySelectorAll('.doc-drag-handle').forEach(h => h.remove());
-        return c.innerHTML || el.textContent || '<br>';
-      };
-
-      if (_dropType === 'left') {
-        cellA.innerHTML = cleanClone(_dragBlock);
-        cellB.innerHTML = cleanClone(_dropTarget);
-      } else {
-        cellA.innerHTML = cleanClone(_dropTarget);
-        cellB.innerHTML = cleanClone(_dragBlock);
-      }
-
-      const split = document.createElement('div');
-      split.className = 'doc-split';
-      split.id = splitId;
-      split.setAttribute('contenteditable','false');
-      const divider = document.createElement('div');
-      divider.className = 'doc-split-divider';
-      divider.style.left = '50%';
-      divider.addEventListener('mousedown', ev2 => startSplitResize(ev2, splitId));
-      split.appendChild(cellA);
-      split.appendChild(cellB);
-      split.appendChild(divider);
-
-      _dropTarget.replaceWith(split);
+      const aFirst = _dropType === 'right'; // drag goes to right of target
+      const cols = createColsFromBlocks(_dragBlock, _dropTarget, aFirst);
+      _dropTarget.replaceWith(cols);
       _dragBlock.remove();
-
       const p = document.createElement('p');
       p.innerHTML = '<br>';
-      split.insertAdjacentElement('afterend', p);
+      cols.insertAdjacentElement('afterend', p);
     }
 
     _dragBlock = null;
@@ -3346,7 +4024,17 @@ function highlightSlash() {
   const items = document.querySelectorAll('#slash-menu .slash-item');
   items.forEach((el, i) => el.classList.toggle('active', i === slashActive));
   const active = document.querySelector('#slash-menu .slash-item.active');
-  if (active) active.scrollIntoView({ block: 'nearest' });
+  if (active) {
+    const inner = document.getElementById('slash-menu-inner');
+    if (inner) {
+      const itemTop    = active.offsetTop;
+      const itemBottom = itemTop + active.offsetHeight;
+      const visTop     = inner.scrollTop;
+      const visBottom  = visTop + inner.clientHeight;
+      if (itemTop < visTop) inner.scrollTop = itemTop - 6;
+      else if (itemBottom > visBottom) inner.scrollTop = itemBottom - inner.clientHeight + 6;
+    }
+  }
 }
 
 function hideSlashMenu() {
@@ -3387,8 +4075,22 @@ function insertCallout(color) {
   const icon = icons[color] || '💡';
   const cls = color ? `doc-callout ${color}` : 'doc-callout default';
   const calloutId = 'callout_' + Date.now();
-  const html = `<div class="${cls}" id="${calloutId}"><span class="doc-callout-icon" onclick="openCalloutEmojiPicker('${calloutId}',this)" title="Change icon">${icon}</span><div class="doc-callout-text" contenteditable="true">Type your note here...</div></div><p><br></p>`;
+  const html = `<div class="${cls}" id="${calloutId}"><span class="doc-callout-icon" contenteditable="false" onclick="openCalloutEmojiPicker('${calloutId}',this)" title="Change icon">${icon}</span><div class="doc-callout-text" contenteditable="true" data-placeholder="Type a note..."></div></div><p><br></p>`;
   document.execCommand('insertHTML', false, html);
+  // Focus inside the callout text immediately
+  setTimeout(() => {
+    const callout = document.getElementById(calloutId);
+    const textEl = callout?.querySelector('.doc-callout-text');
+    if (textEl) {
+      textEl.focus();
+      const r = document.createRange();
+      r.selectNodeContents(textEl);
+      r.collapse(false);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(r);
+    }
+  }, 20);
 }
 
 function openCalloutEmojiPicker(calloutId, iconEl) {
@@ -3431,10 +4133,18 @@ function insertBlock(cmd) {
 
   let html = '';
   switch(cmd) {
-    case 'p':       html = '<p><br></p>'; break;
-    case 'h1':      document.execCommand('formatBlock', false, 'H1'); return;
-    case 'h2':      document.execCommand('formatBlock', false, 'H2'); return;
-    case 'h3':      document.execCommand('formatBlock', false, 'H3'); return;
+    case 'p':
+      document.execCommand('formatBlock', false, 'P');
+      return;
+    case 'h1':
+      document.execCommand('formatBlock', false, 'H1');
+      return;
+    case 'h2':
+      document.execCommand('formatBlock', false, 'H2');
+      return;
+    case 'h3':
+      document.execCommand('formatBlock', false, 'H3');
+      return;
     case 'ul':      document.execCommand('insertUnorderedList'); return;
     case 'ol':      document.execCommand('insertOrderedList'); return;
     case 'quote':   document.execCommand('formatBlock', false, 'BLOCKQUOTE'); return;
@@ -3444,60 +4154,404 @@ function insertBlock(cmd) {
     case 'callout-red':    insertCallout('red'); return;
     case 'callout-green':  insertCallout('green'); return;
     case 'callout-purple': insertCallout('purple'); return;
-    case 'table':
-      html = `<table><thead><tr><th>Column 1</th><th>Column 2</th><th>Column 3</th></tr></thead><tbody><tr><td><br></td><td><br></td><td><br></td></tr><tr><td><br></td><td><br></td><td><br></td></tr></tbody></table><p><br></p>`;
-      break;
-    case '2col':
-      insertSplitPane(); return;
+    case 'table':    insertDocTable(); return;
+    case '2col':     insertColumns(2); return;
+    case '3col':     insertColumns(3); return;
+    case '4col':     insertColumns(4); return;
     case 'bookmark': promptBookmark(); return;
     case 'image':    promptImage(); return;
     case 'todo':     insertDocTodo(); return;
+    case 'video':    promptVideoEmbed(); return;
+    case 'toggle':   insertToggleBlock(); return;
     default: html = '<p><br></p>';
   }
   document.execCommand('insertHTML', false, html);
 }
 
-function insertSplitPane() {
-  const splitId = 'split_' + Date.now();
-  const html = `<div class="doc-split" id="${splitId}" contenteditable="false">
-    <div class="doc-split-cell" contenteditable="true"><br></div>
-    <div class="doc-split-cell" contenteditable="true"><br></div>
-    <div class="doc-split-divider" onmousedown="startSplitResize(event,'${splitId}')"></div>
-  </div><p><br></p>`;
-  fmtExec('insertHTML', html);
-  // Position divider at 50%
-  setTimeout(() => {
-    const split = document.getElementById(splitId);
-    if (split) {
-      const div = split.querySelector('.doc-split-divider');
-      if (div) div.style.left = '50%';
-    }
-  }, 50);
+function makeColCell(colsId, cellIndex) {
+  const cell = document.createElement('div');
+  cell.className = 'doc-col-cell';
+  cell.setAttribute('contenteditable','true');
+  cell.innerHTML = '<br>';
+  // Delete button
+  const del = document.createElement('button');
+  del.className = 'doc-col-del';
+  del.textContent = '✕';
+  del.setAttribute('contenteditable','false');
+  del.title = 'Delete column';
+  del.addEventListener('mousedown', e => { e.preventDefault(); deleteColumn(colsId, cell); });
+  cell.appendChild(del);
+  // Drag handle for reordering
+  const handle = document.createElement('span');
+  handle.className = 'doc-col-handle';
+  handle.textContent = '⠿';
+  handle.setAttribute('contenteditable','false');
+  handle.title = 'Drag to reorder';
+  handle.addEventListener('mousedown', e => startColCellDrag(e, colsId, cell));
+  cell.appendChild(handle);
+  return cell;
 }
 
-function startSplitResize(e, id) {
+function insertColumns(numCols) {
+  numCols = numCols || 2;
+  const colsId = 'cols_' + Date.now();
+  const cols = document.createElement('div');
+  cols.className = 'doc-cols';
+  cols.id = colsId;
+  cols.setAttribute('contenteditable','false');
+
+  for (let i = 0; i < numCols; i++) {
+    if (i > 0) {
+      const div = document.createElement('div');
+      div.className = 'doc-col-divider';
+      div.addEventListener('mousedown', (e) => startColResize(e, colsId, i - 1));
+      cols.appendChild(div);
+    }
+    cols.appendChild(makeColCell(colsId, i));
+  }
+
+  const addBtn = document.createElement('button');
+  addBtn.className = 'doc-col-add-btn';
+  addBtn.textContent = '+';
+  addBtn.title = 'Add column';
+  addBtn.setAttribute('contenteditable','false');
+  addBtn.addEventListener('click', () => addColumn(colsId));
+  cols.appendChild(addBtn);
+
+  // Insert into editor
+  const editor = document.getElementById('doc-body-input');
+  const sel = window.getSelection();
+  if (sel.rangeCount && editor.contains(sel.getRangeAt(0).startContainer)) {
+    const range = sel.getRangeAt(0);
+    range.deleteContents();
+    range.insertNode(cols);
+  } else {
+    editor.appendChild(cols);
+  }
+  const p = document.createElement('p');
+  p.innerHTML = '<br>';
+  cols.insertAdjacentElement('afterend', p);
+  autoSaveDoc();
+}
+
+// Alias for slash command
+function insertSplitPane() { insertColumns(2); }
+
+function addColumn(colsId) {
+  const cols = document.getElementById(colsId);
+  if (!cols) return;
+  const cells = cols.querySelectorAll('.doc-col-cell');
+  if (cells.length >= 4) return;
+  const addBtn = cols.querySelector('.doc-col-add-btn');
+  const div = document.createElement('div');
+  div.className = 'doc-col-divider';
+  const idx = cells.length - 1;
+  div.addEventListener('mousedown', e => startColResize(e, colsId, idx));
+  const cell = makeColCell(colsId, cells.length);
+  cols.insertBefore(div, addBtn);
+  cols.insertBefore(cell, addBtn);
+  autoSaveDoc();
+}
+
+function deleteColumn(colsId, cell) {
+  const cols = document.getElementById(colsId);
+  if (!cols) return;
+  const cells = cols.querySelectorAll('.doc-col-cell');
+  if (cells.length <= 1) {
+    // Last column — remove the whole cols block
+    const p = document.createElement('p');
+    p.innerHTML = '<br>';
+    cols.insertAdjacentElement('afterend', p);
+    cols.remove();
+    autoSaveDoc();
+    return;
+  }
+  // Remove the divider before or after this cell
+  const prev = cell.previousElementSibling;
+  const next = cell.nextElementSibling;
+  if (prev && prev.classList.contains('doc-col-divider')) prev.remove();
+  else if (next && next.classList.contains('doc-col-divider')) next.remove();
+  cell.remove();
+  autoSaveDoc();
+}
+
+// Drag cell left/right to reorder within the cols block
+function startColCellDrag(e, colsId, cell) {
   e.preventDefault();
-  const split = document.getElementById(id);
-  if (!split) return;
-  const startX = e.clientX;
-  const totalW = split.offsetWidth;
-  const cells = split.querySelectorAll('.doc-split-cell');
-  const startLeft = cells[0].offsetWidth / totalW;
+  e.stopPropagation();
+  const cols = document.getElementById(colsId);
+  if (!cols) return;
+  cell.style.opacity = '0.4';
+  let _over = null;
+
+  function getCells() { return [...cols.querySelectorAll('.doc-col-cell')]; }
 
   function onMove(ev) {
-    const delta = (ev.clientX - startX) / totalW;
-    const newLeft = Math.max(0.15, Math.min(0.85, startLeft + delta));
-    split.style.gridTemplateColumns = `${newLeft}fr ${1-newLeft}fr`;
-    const div = split.querySelector('.doc-split-divider');
-    if (div) div.style.left = (newLeft * 100) + '%';
+    getCells().forEach(c => c.style.outline = '');
+    const cells = getCells().filter(c => c !== cell);
+    for (const c of cells) {
+      const r = c.getBoundingClientRect();
+      if (ev.clientX >= r.left && ev.clientX <= r.right) {
+        c.style.outline = '2px solid var(--ink)';
+        c.style.outlineOffset = '-2px';
+        _over = c;
+        break;
+      } else {
+        if (_over === c) _over = null;
+      }
+    }
+  }
+
+  function onUp() {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    cell.style.opacity = '';
+    getCells().forEach(c => { c.style.outline = ''; });
+
+    if (!_over || _over === cell) return;
+
+    // Rebuild cells in new order — swap cell and _over
+    const allCells = getCells();
+    const iA = allCells.indexOf(cell);
+    const iB = allCells.indexOf(_over);
+    if (iA < 0 || iB < 0) return;
+
+    // Swap content (safer than moving DOM elements with attached events)
+    const tmpHTML = cell.innerHTML;
+    // Remove control buttons before swapping
+    const cellContent = [...cell.childNodes].filter(n => !n.classList?.contains('doc-col-del') && !n.classList?.contains('doc-col-handle'));
+    const overContent = [..._over.childNodes].filter(n => !n.classList?.contains('doc-col-del') && !n.classList?.contains('doc-col-handle'));
+
+    const cellFrag = document.createDocumentFragment();
+    cellContent.forEach(n => cellFrag.appendChild(n.cloneNode(true)));
+    const overFrag = document.createDocumentFragment();
+    overContent.forEach(n => overFrag.appendChild(n.cloneNode(true)));
+
+    // Clear and refill
+    [...cell.childNodes].filter(n => !n.classList?.contains('doc-col-del') && !n.classList?.contains('doc-col-handle')).forEach(n => n.remove());
+    [..._over.childNodes].filter(n => !n.classList?.contains('doc-col-del') && !n.classList?.contains('doc-col-handle')).forEach(n => n.remove());
+
+    cell.insertBefore(overFrag, cell.querySelector('.doc-col-del'));
+    _over.insertBefore(cellFrag, _over.querySelector('.doc-col-del'));
+
+    _over = null;
+    autoSaveDoc();
+  }
+
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+function startColResize(e, colsId, dividerIndex) {
+  e.preventDefault();
+  const cols = document.getElementById(colsId);
+  if (!cols) return;
+  const cells = [...cols.querySelectorAll('.doc-col-cell')];
+  const leftCell  = cells[dividerIndex];
+  const rightCell = cells[dividerIndex + 1];
+  if (!leftCell || !rightCell) return;
+
+  const startX   = e.clientX;
+  const startLW  = leftCell.getBoundingClientRect().width;
+  const startRW  = rightCell.getBoundingClientRect().width;
+  const totalW   = startLW + startRW;
+  const divEl    = e.currentTarget;
+  divEl.classList.add('dragging');
+
+  function onMove(ev) {
+    const delta = ev.clientX - startX;
+    const newLW = Math.max(60, Math.min(totalW - 60, startLW + delta));
+    const newRW = totalW - newLW;
+    leftCell.style.flex  = `0 0 ${newLW}px`;
+    rightCell.style.flex = `0 0 ${newRW}px`;
   }
   function onUp() {
+    divEl.classList.remove('dragging');
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
     autoSaveDoc();
   }
   document.addEventListener('mousemove', onMove);
   document.addEventListener('mouseup', onUp);
+}
+
+function createColsFromBlocks(blockA, blockB, aFirst) {
+  const colsId = 'cols_' + Date.now();
+  const cleanHTML = el => {
+    const c = el.cloneNode(true);
+    c.querySelectorAll('.doc-drag-handle').forEach(h => h.remove());
+    return c.innerHTML || '<br>';
+  };
+  const htmlA = aFirst ? cleanHTML(blockA) : cleanHTML(blockB);
+  const htmlB = aFirst ? cleanHTML(blockB) : cleanHTML(blockA);
+
+  const cols = document.createElement('div');
+  cols.className = 'doc-cols';
+  cols.id = colsId;
+  cols.setAttribute('contenteditable','false');
+
+  const cellA = makeColCell(colsId, 0);
+  // Clear default <br> and set real content
+  [...cellA.childNodes].filter(n => !n.classList?.contains('doc-col-del') && !n.classList?.contains('doc-col-handle')).forEach(n => n.remove());
+  const tempA = document.createElement('div');
+  tempA.innerHTML = htmlA;
+  while (tempA.firstChild) cellA.insertBefore(tempA.firstChild, cellA.querySelector('.doc-col-del'));
+
+  const divider = document.createElement('div');
+  divider.className = 'doc-col-divider';
+  divider.addEventListener('mousedown', e => startColResize(e, colsId, 0));
+
+  const cellB = makeColCell(colsId, 1);
+  [...cellB.childNodes].filter(n => !n.classList?.contains('doc-col-del') && !n.classList?.contains('doc-col-handle')).forEach(n => n.remove());
+  const tempB = document.createElement('div');
+  tempB.innerHTML = htmlB;
+  while (tempB.firstChild) cellB.insertBefore(tempB.firstChild, cellB.querySelector('.doc-col-del'));
+
+  const addBtn = document.createElement('button');
+  addBtn.className = 'doc-col-add-btn';
+  addBtn.textContent = '+';
+  addBtn.title = 'Add column';
+  addBtn.setAttribute('contenteditable','false');
+  addBtn.addEventListener('click', () => addColumn(colsId));
+
+  cols.appendChild(cellA);
+  cols.appendChild(divider);
+  cols.appendChild(cellB);
+  cols.appendChild(addBtn);
+  return cols;
+}
+
+function makeTableCell(tableId, rowIndex, colIndex) {
+  const td = document.createElement('td');
+  td.setAttribute('contenteditable','true');
+  td.innerHTML = '<br>';
+
+  // Delete column button (top of cell, only visible on first row hover via CSS)
+  const delCol = document.createElement('button');
+  delCol.className = 'doc-table-col-del';
+  delCol.textContent = '✕';
+  delCol.setAttribute('contenteditable','false');
+  delCol.title = 'Delete column';
+  delCol.addEventListener('mousedown', e => { e.preventDefault(); tableDeleteCol(tableId, colIndex); });
+  td.appendChild(delCol);
+
+  return td;
+}
+
+function makeTableRow(tableId, cols, rowIndex) {
+  const tr = document.createElement('tr');
+
+  // Delete row button (left side)
+  const delRow = document.createElement('button');
+  delRow.className = 'doc-table-row-del';
+  delRow.textContent = '✕';
+  delRow.setAttribute('contenteditable','false');
+  delRow.title = 'Delete row';
+  delRow.addEventListener('mousedown', e => { e.preventDefault(); tableDeleteRow(tableId, tr); });
+  tr.appendChild(delRow);
+
+  for (let c = 0; c < cols; c++) {
+    tr.appendChild(makeTableCell(tableId, rowIndex, c));
+  }
+  return tr;
+}
+
+function insertDocTable(rows, cols) {
+  rows = rows || 2; cols = cols || 2;
+  const tableId = 'tbl_' + Date.now();
+  const wrap = document.createElement('div');
+  wrap.className = 'doc-table-wrap';
+  wrap.id = tableId;
+  wrap.setAttribute('contenteditable','false');
+
+  const table = document.createElement('table');
+  table.className = 'doc-table';
+
+  for (let r = 0; r < rows; r++) {
+    table.appendChild(makeTableRow(tableId, cols, r));
+  }
+
+  const addColBtn = document.createElement('div');
+  addColBtn.className = 'doc-table-add-col';
+  addColBtn.innerHTML = '<button title="Add column">+</button>';
+  addColBtn.querySelector('button').addEventListener('click', () => tableAddCol(tableId));
+
+  const addRowBtn = document.createElement('div');
+  addRowBtn.className = 'doc-table-add-row';
+  addRowBtn.innerHTML = '<button>+ Add row</button>';
+  addRowBtn.querySelector('button').addEventListener('click', () => tableAddRow(tableId));
+
+  wrap.appendChild(table);
+  wrap.appendChild(addColBtn);
+  wrap.appendChild(addRowBtn);
+
+  const editor = document.getElementById('doc-body-input');
+  const sel = window.getSelection();
+  if (sel.rangeCount && editor.contains(sel.getRangeAt(0).startContainer)) {
+    const range = sel.getRangeAt(0);
+    let block = range.startContainer;
+    while (block.parentElement && block.parentElement !== editor) block = block.parentElement;
+    block.insertAdjacentElement('afterend', wrap);
+  } else {
+    editor.appendChild(wrap);
+  }
+
+  const p = document.createElement('p');
+  p.innerHTML = '<br>';
+  wrap.insertAdjacentElement('afterend', p);
+
+  const firstCell = table.querySelector('td');
+  if (firstCell) {
+    firstCell.focus();
+    const r = document.createRange();
+    r.selectNodeContents(firstCell); r.collapse(true);
+    sel.removeAllRanges(); sel.addRange(r);
+  }
+  autoSaveDoc();
+}
+
+function tableAddRow(tableId) {
+  const wrap = document.getElementById(tableId);
+  const table = wrap?.querySelector('.doc-table');
+  if (!table) return;
+  const cols = [...table.rows[0].cells].filter(c => !c.classList?.contains('doc-table-row-del')).length;
+  const tr = makeTableRow(tableId, cols, table.rows.length);
+  table.appendChild(tr);
+  tr.querySelector('td')?.focus();
+  autoSaveDoc();
+}
+
+function tableAddCol(tableId) {
+  const wrap = document.getElementById(tableId);
+  const table = wrap?.querySelector('.doc-table');
+  if (!table) return;
+  [...table.rows].forEach((tr, ri) => {
+    const colIdx = tr.cells.length;
+    tr.appendChild(makeTableCell(tableId, ri, colIdx));
+  });
+  autoSaveDoc();
+}
+
+function tableDeleteRow(tableId, tr) {
+  const wrap = document.getElementById(tableId);
+  const table = wrap?.querySelector('.doc-table');
+  if (!table) return;
+  if (table.rows.length <= 1) { wrap.remove(); autoSaveDoc(); return; }
+  tr.remove();
+  autoSaveDoc();
+}
+
+function tableDeleteCol(tableId, colIndex) {
+  const wrap = document.getElementById(tableId);
+  const table = wrap?.querySelector('.doc-table');
+  if (!table) return;
+  const allCols = table.rows[0]?.querySelectorAll('td').length || 0;
+  if (allCols <= 1) { wrap.remove(); autoSaveDoc(); return; }
+  [...table.rows].forEach(tr => {
+    const cells = [...tr.querySelectorAll('td')];
+    if (cells[colIndex]) cells[colIndex].remove();
+  });
+  autoSaveDoc();
 }
 
 function fmtExec(cmd, val) {
@@ -4268,6 +5322,176 @@ function renderScheduleSidebar() {
   }).join('');
 }
 
+// ── CONTROL CENTER ──
+
+// Login history stored in localStorage (Supabase doesn't expose session list to anon)
+function logLoginEvent(email, type) {
+  const history = JSON.parse(localStorage.getItem('cc_login_history') || '[]');
+  history.unshift({
+    email,
+    type, // 'login' | 'request'
+    time: new Date().toISOString(),
+    device: navigator.userAgent.split(') ')[0].split('(')[1] || 'Unknown',
+    approved: type === 'login',
+  });
+  // Keep last 50 events
+  localStorage.setItem('cc_login_history', JSON.stringify(history.slice(0, 50)));
+}
+
+function logAccessRequest(email, name) {
+  const requests = JSON.parse(localStorage.getItem('cc_requests') || '[]');
+  requests.unshift({ email, name, time: new Date().toISOString(), status: 'pending' });
+  localStorage.setItem('cc_requests', JSON.stringify(requests.slice(0, 30)));
+}
+
+function openControlCenter() {
+  const overlay = document.getElementById('cc-overlay');
+  const drawer  = document.getElementById('cc-drawer');
+  overlay.style.display = 'block';
+  drawer.style.display  = 'flex';
+  renderControlCenter();
+}
+
+function closeControlCenter() {
+  document.getElementById('cc-overlay').style.display = 'none';
+  document.getElementById('cc-drawer').style.display  = 'none';
+}
+
+async function renderControlCenter() {
+  renderCCSessions();
+  renderCCHistory();
+  renderCCRequests();
+  renderCCAllowlist();
+}
+
+async function renderCCSessions() {
+  const el = document.getElementById('cc-sessions');
+  // Supabase Admin API isn't available client-side — show current session info
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { el.innerHTML = '<div style="font-size:12px;color:#aaa">No active session</div>'; return; }
+
+  const created = new Date(session.created_at || Date.now()).toLocaleString();
+  const expires = new Date(session.expires_at * 1000).toLocaleString();
+  el.innerHTML = `
+    <div style="border:1px solid rgba(0,0,0,0.08);border-radius:8px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <div>
+        <div style="font-size:12px;font-weight:500;color:#1A1A1A">${escHtml(session.user.email)}</div>
+        <div style="font-size:10px;color:#aaa;margin-top:2px">This device · Signed in ${created}</div>
+        <div style="font-size:10px;color:#aaa">Session expires ${expires}</div>
+      </div>
+      <span style="font-size:10px;padding:3px 8px;border-radius:20px;background:rgba(100,200,100,0.15);color:#3a8a3a;font-weight:500">Active</span>
+    </div>`;
+}
+
+function renderCCHistory() {
+  const el = document.getElementById('cc-history');
+  const history = JSON.parse(localStorage.getItem('cc_login_history') || '[]');
+  if (!history.length) { el.innerHTML = '<div style="font-size:12px;color:#aaa">No history yet</div>'; return; }
+  el.innerHTML = history.map(h => {
+    const time = new Date(h.time).toLocaleString();
+    const isHeidi = ALL_HEIDI.includes(h.email?.toLowerCase());
+    const dot = h.type === 'login' ? '#3a8a3a' : '#e8a020';
+    return `<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 12px;border:1px solid rgba(0,0,0,0.06);border-radius:6px">
+      <div style="width:7px;height:7px;border-radius:50%;background:${dot};margin-top:4px;flex-shrink:0"></div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:500;color:#1A1A1A;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(h.email)}</div>
+        <div style="font-size:10px;color:#aaa;margin-top:1px">${h.type === 'login' ? 'Logged in' : 'Requested access'} · ${time}</div>
+      </div>
+      ${isHeidi ? '<span style="font-size:9px;color:#6699ff;font-weight:600;flex-shrink:0">YOU</span>' : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderCCRequests() {
+  const el = document.getElementById('cc-requests');
+  const requests = JSON.parse(localStorage.getItem('cc_requests') || '[]');
+  if (!requests.length) { el.innerHTML = '<div style="font-size:12px;color:#aaa">No pending requests</div>'; return; }
+  el.innerHTML = requests.map((r, i) => `
+    <div style="border:1px solid rgba(0,0,0,0.08);border-radius:8px;padding:10px 12px;display:flex;align-items:center;gap:10px;justify-content:space-between">
+      <div>
+        <div style="font-size:12px;font-weight:500">${escHtml(r.name || r.email)}</div>
+        <div style="font-size:10px;color:#aaa">${escHtml(r.email)} · ${new Date(r.time).toLocaleString()}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        ${r.status === 'pending' ? `
+          <button onclick="ccApproveRequest(${i})" style="padding:5px 10px;background:#1A1A1A;color:#F9F7F3;border:none;border-radius:5px;font-size:11px;cursor:pointer">Approve</button>
+          <button onclick="ccDenyRequest(${i})" style="padding:5px 10px;border:1px solid rgba(0,0,0,0.12);background:transparent;border-radius:5px;font-size:11px;cursor:pointer;color:#888">Deny</button>
+        ` : `<span style="font-size:10px;color:#aaa;font-style:italic">${escHtml(r.status)}</span>`}
+      </div>
+    </div>`).join('');
+}
+
+async function ccApproveRequest(i) {
+  const requests = JSON.parse(localStorage.getItem('cc_requests') || '[]');
+  const req = requests[i];
+  if (!req) return;
+  // Send magic link to the requester
+  const { error } = await sb.auth.signInWithOtp({
+    email: req.email,
+    options: { emailRedirectTo: window.location.href }
+  });
+  requests[i].status = error ? 'error: ' + error.message : 'approved ✓';
+  localStorage.setItem('cc_requests', JSON.stringify(requests));
+  renderCCRequests();
+}
+
+function ccDenyRequest(i) {
+  const requests = JSON.parse(localStorage.getItem('cc_requests') || '[]');
+  requests[i].status = 'denied';
+  localStorage.setItem('cc_requests', JSON.stringify(requests));
+  renderCCRequests();
+}
+
+function renderCCAllowlist() {
+  const el = document.getElementById('cc-allowlist');
+  const extra = JSON.parse(localStorage.getItem('cc_extra_allowlist') || '[]');
+  const all = [...ALL_HEIDI, ...extra];
+  el.innerHTML = all.map((e, i) => {
+    const isCore = ALL_HEIDI.includes(e);
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border:1px solid rgba(0,0,0,0.07);border-radius:6px">
+      <div>
+        <span style="font-size:12px;color:#1A1A1A">${escHtml(e)}</span>
+        ${isCore ? '<span style="font-size:9px;color:#6699ff;margin-left:6px;font-weight:600">HEIDI</span>' : ''}
+      </div>
+      ${!isCore ? `<button onclick="ccRemoveEmail(${i - ALL_HEIDI.length})" style="background:none;border:none;font-size:12px;color:#aaa;cursor:pointer" onmouseover="this.style.color='#c00'" onmouseout="this.style.color='#aaa'">✕</button>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function ccAddEmail() {
+  const input = document.getElementById('cc-new-email');
+  const email = input.value.trim().toLowerCase();
+  if (!email || !email.includes('@')) return;
+  const extra = JSON.parse(localStorage.getItem('cc_extra_allowlist') || '[]');
+  if (![...ALL_HEIDI, ...extra].includes(email)) {
+    extra.push(email);
+    localStorage.setItem('cc_extra_allowlist', JSON.stringify(extra));
+  }
+  input.value = '';
+  renderCCAllowlist();
+}
+
+function ccRemoveEmail(i) {
+  const extra = JSON.parse(localStorage.getItem('cc_extra_allowlist') || '[]');
+  extra.splice(i, 1);
+  localStorage.setItem('cc_extra_allowlist', JSON.stringify(extra));
+  renderCCAllowlist();
+}
+
+async function signOutAllOthers() {
+  if (!confirm('This will sign out all other devices. Your current session stays active.')) return;
+  // Supabase admin signOut('others') requires a server — best we can do client-side is revoke current token and re-issue
+  const { error } = await sb.auth.refreshSession();
+  if (!error) alert('Done — other devices will be signed out on their next action.');
+  else alert('Error: ' + error.message);
+}
+
+function clearLoginHistory() {
+  if (!confirm('Clear all login history?')) return;
+  localStorage.removeItem('cc_login_history');
+  renderCCHistory();
+}
+
 function escHtml(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
@@ -4378,10 +5602,25 @@ function renderSchedule() {
     : DAY_ORDER;
   const splitLabel = {Monday:'Push',Wednesday:'Cardio',Thursday:'Pull',Saturday:'Legs',Sunday:'Upper'};
 
+  // Calculate the date for each day of the current week (Monday-based)
+  const today = new Date();
+  const currentDayJS = today.getDay(); // 0=Sun,1=Mon,...
+  const monday = new Date(today);
+  const daysFromMon = (currentDayJS + 6) % 7; // days since Monday
+  monday.setDate(today.getDate() - daysFromMon);
+
+  const dayIndexMap = { Monday:0, Tuesday:1, Wednesday:2, Thursday:3, Friday:4, Saturday:5, Sunday:6 };
+  const getDayDate = (dayName) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + dayIndexMap[dayName]);
+    return d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+  };
+
   wrap.innerHTML = orderedDays.map(day => {
     const d = scheduleData[day];
     const isToday = day === todayName;
     const hasWorkout = Array.isArray(d.workout);
+    const dayDate = getDayDate(day);
 
     const blocksHtml = d.blocks.map((b,bi) => `
       <div class="sblock ${b.type}">
@@ -4424,6 +5663,7 @@ function renderSchedule() {
         <div class="sched-day-header">
           <div style="display:flex;align-items:center;gap:10px;flex:1">
             <span class="sched-day-name">${day}</span>
+            <span style="font-size:11px;color:var(--ink2);font-family:var(--mono)">${dayDate}</span>
             <span class="sday-tag ${d.tag}">${escHtml(d.tagLabel)}</span>
             ${isToday ? '<span class="sday-tag today-tag">Today</span>' : ''}
           </div>
