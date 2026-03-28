@@ -1012,6 +1012,27 @@
   }
   .sched-ampm-btn:hover { background: var(--ink); color: #F9F7F3; border-color: var(--ink); }
 
+  /* Click-to-add inline slot */
+  .sched-hour-empty { cursor: text; transition: background 0.1s; }
+  .sched-hour-empty:hover { background: rgba(0,0,0,0.025); }
+  .sched-hour-row.slot-drag-over .sched-hour-items { background: rgba(0,0,0,0.04); }
+  .sched-inline-add { padding: 3px 8px 4px; }
+  .sched-inline-input {
+    width: 100%; border: none; border-bottom: 1px solid var(--ink);
+    background: transparent; font-family: var(--sans); font-size: 12px;
+    color: var(--ink); outline: none; padding: 2px 0;
+  }
+  /* Workout drag */
+  .workout-ex { cursor: grab; }
+  .workout-ex:active { cursor: grabbing; }
+  .workout-ex.wex-drag-over { background: rgba(0,0,0,0.04); border-top: 2px solid rgba(0,0,0,0.2); }
+  .sched-workout-card.wex-card-over { box-shadow: 0 0 0 2px rgba(0,0,0,0.2); }
+  .workout-ex-drag-handle {
+    color: var(--ink3); font-size: 11px; opacity: 0; transition: opacity 0.15s;
+    cursor: grab; user-select: none; text-align: center;
+  }
+  .workout-ex:hover .workout-ex-drag-handle { opacity: 0.4; }
+
   .sched-add-row {
     display: flex; gap: 6px; padding: 8px 14px 10px;
     border-top: 1px solid var(--border);
@@ -1047,7 +1068,7 @@
   .workout-duration { font-family: var(--mono); font-size: 9px; color: var(--ink2); }
   .workout-exercises { padding: 4px 0; }
   .workout-ex {
-    display: grid; grid-template-columns: 24px 1fr 90px 70px;
+    display: grid; grid-template-columns: 14px 1fr 90px 20px;
     align-items: center; gap: 0;
     padding: 7px 14px; border-bottom: 1px solid rgba(0,0,0,0.04);
     transition: background 0.1s;
@@ -5781,9 +5802,7 @@ function renderSchedule() {
     const mkBlock = (b,bi) => `
       <div class="sblock ${b.type}" draggable="true"
         ondragstart="schedDragStart(event,'${day}',${bi})"
-        ondragover="schedDragOver(event)"
-        ondragleave="this.classList.remove('drag-over')"
-        ondrop="schedDrop(event,'${day}',${bi})">
+        ondragend="document.querySelectorAll('.slot-drag-over').forEach(el=>el.classList.remove('slot-drag-over'))">
         <span class="sblock-drag">⠿</span>
         <span class="sblock-label" contenteditable="true"
           onblur="saveBlockEdit('${day}',${bi},'label',this.textContent.trim())"
@@ -5792,10 +5811,13 @@ function renderSchedule() {
         <button class="sblock-del" onclick="deleteBlock('${day}',${bi})">✕</button>
       </div>`;
     const timelineHtml = SCHED_HOURS.map(h => `
-      <div class="sched-hour-row">
+      <div class="sched-hour-row" id="shr-${day}-${h}"
+        ondragover="schedSlotDragOver(event,'${day}',${h})"
+        ondragleave="schedSlotDragLeave(event,'${day}',${h})"
+        ondrop="schedSlotDrop(event,'${day}',${h})">
         <div class="sched-hour-label">${schedHrLabel(h)}</div>
         <div class="sched-hour-divider"></div>
-        <div class="sched-hour-items">${(byHour[h]||[]).map(({b,bi})=>mkBlock(b,bi)).join('')||'<div class="sched-hour-empty"></div>'}</div>
+        <div class="sched-hour-items">${(byHour[h]||[]).map(({b,bi})=>mkBlock(b,bi)).join('')||`<div class="sched-hour-empty" onclick="schedInlineAdd('${day}',${h})"></div>`}</div>
       </div>`).join('');
     const unplacedHtml = unplaced.length ? `<div class="sched-unplaced"><div class="sched-unplaced-label">Other</div>${unplaced.map(({b,bi})=>mkBlock(b,bi)).join('')}</div>` : '';
     const blocksHtml = timelineHtml + unplacedHtml;
@@ -5806,10 +5828,17 @@ function renderSchedule() {
           <div class="workout-label">Workout // 60 min</div>
           <div class="workout-duration">${escHtml(splitLabel[day]||'')}</div>
         </div>
-        <div class="workout-exercises">
+        <div class="workout-exercises"
+          ondragover="wexCardDragOver(event)"
+          ondragleave="this.classList.remove('wex-card-over')"
+          ondrop="wexCardDrop(event,'${day}')">
           ${d.workout.map((ex,ei) => `
-            <div class="workout-ex">
-              <span class="workout-ex-num">${String(ei+1).padStart(2,'0')}</span>
+            <div class="workout-ex" draggable="true"
+              ondragstart="wexDragStart(event,'${day}',${ei})"
+              ondragover="wexItemDragOver(event,this)"
+              ondragleave="this.classList.remove('wex-drag-over')"
+              ondrop="wexItemDrop(event,'${day}',${ei})">
+              <span class="workout-ex-drag-handle">⠿</span>
               <input class="workout-ex-name" value="${escHtml(ex.name)}" placeholder="Exercise"
                 onchange="saveWorkoutEdit('${day}',${ei},'name',this.value)">
               <input class="workout-ex-sets" value="${escHtml(ex.sets)}" placeholder="Sets × reps"
@@ -5913,21 +5942,122 @@ function schedDragStart(e,day,idx){
   _schedDragDay=day; _schedDragIdx=idx;
   e.dataTransfer.effectAllowed='move';
 }
-function schedDragOver(e){
-  e.preventDefault();
-  e.currentTarget.classList.add('drag-over');
-  e.dataTransfer.dropEffect='move';
+function schedSlotDragOver(e, day, h) {
+  if (_schedDragIdx === null) return;
+  e.preventDefault(); e.stopPropagation();
+  const row = document.getElementById('shr-'+day+'-'+h);
+  if (row) row.classList.add('slot-drag-over');
 }
-function schedDrop(e,day,idx){
+function schedSlotDragLeave(e, day, h) {
+  const row = document.getElementById('shr-'+day+'-'+h);
+  if (row && !row.contains(e.relatedTarget)) row.classList.remove('slot-drag-over');
+}
+function schedSlotDrop(e, day, h) {
   e.preventDefault();
-  e.currentTarget.classList.remove('drag-over');
-  if (_schedDragDay!==day || _schedDragIdx===idx || _schedDragIdx===null) return;
+  const row = document.getElementById('shr-'+day+'-'+h);
+  if (row) row.classList.remove('slot-drag-over');
+  if (_schedDragDay !== day || _schedDragIdx === null) return;
   const blocks = scheduleData[day].blocks;
-  const fromTime = blocks[_schedDragIdx].time;
-  blocks[_schedDragIdx].time = blocks[idx].time;
-  blocks[idx].time = fromTime;
-  _schedDragIdx=null; _schedDragDay=null;
+  const dragged = blocks[_schedDragIdx];
+  // Preserve original minutes
+  const origMins = schedToMins(dragged.time);
+  const origMin = origMins < 9999 ? origMins % 60 : 0;
+  const period = h >= 12 ? 'PM' : 'AM';
+  const dispH = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  const newTime = `${dispH}:${String(origMin).padStart(2,'0')} ${period}`;
+  // Push items already in target hour +1 hour
+  blocks.forEach((b, bi) => {
+    if (bi === _schedDragIdx) return;
+    const bHr = Math.floor(schedToMins(b.time) / 60);
+    if (bHr === h) {
+      const bMin = schedToMins(b.time) % 60;
+      const newHr = h + 1;
+      if (newHr <= 23) {
+        const np = newHr >= 12 ? 'PM' : 'AM';
+        const ndH = newHr > 12 ? newHr - 12 : newHr;
+        b.time = `${ndH}:${String(bMin).padStart(2,'0')} ${np}`;
+      }
+    }
+  });
+  dragged.time = newTime;
+  _schedDragIdx = null; _schedDragDay = null;
   saveSchedule(); saveCurrentWeek(); renderSchedule(); renderFocusSchedule(); renderDailyScheduleView();
+}
+// Click empty slot to add inline
+function schedInlineAdd(day, h) {
+  const row = document.getElementById('shr-'+day+'-'+h);
+  if (!row) return;
+  const itemsDiv = row.querySelector('.sched-hour-items');
+  if (!itemsDiv) return;
+  const period = h >= 12 ? 'PM' : 'AM';
+  const dispH = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  itemsDiv.innerHTML = `<div class="sched-inline-add"><input class="sched-inline-input" placeholder="${dispH} ${period} — add item..."
+    onkeydown="schedInlineKey(event,'${day}',${h})"
+    onblur="schedInlineBlur(event,'${day}',${h})"></div>`;
+  itemsDiv.querySelector('.sched-inline-input').focus();
+}
+let _schedInlineSubmitted = false;
+function schedInlineKey(e, day, h) {
+  if (e.key === 'Escape') { _schedInlineSubmitted = true; renderSchedule(); return; }
+  if (e.key !== 'Enter') return;
+  const val = e.target.value.trim();
+  if (!val) { _schedInlineSubmitted = true; renderSchedule(); return; }
+  _schedInlineSubmitted = true;
+  const period = h >= 12 ? 'PM' : 'AM';
+  const dispH = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  const timeStr = `${dispH}:00 ${period}`;
+  const newBlock = {type:'routine', time:timeStr, label:val};
+  const blocks = scheduleData[day].blocks;
+  const newMins = schedToMins(timeStr);
+  let insertIdx = blocks.findIndex(b => schedToMins(b.time) > newMins);
+  if (insertIdx === -1) insertIdx = blocks.length;
+  blocks.splice(insertIdx, 0, newBlock);
+  saveSchedule(); saveCurrentWeek(); renderSchedule(); renderFocusSchedule(); renderDailyScheduleView();
+}
+function schedInlineBlur(e, day, h) {
+  if (_schedInlineSubmitted) { _schedInlineSubmitted = false; return; }
+  renderSchedule();
+}
+// Workout exercise drag
+let _wexDragDay = null, _wexDragIdx = null;
+function wexDragStart(e, day, idx) {
+  _wexDragDay = day; _wexDragIdx = idx;
+  e.dataTransfer.effectAllowed = 'move';
+  e.stopPropagation();
+}
+function wexItemDragOver(e, el) {
+  if (_wexDragIdx === null) return;
+  e.preventDefault(); e.stopPropagation();
+  el.classList.add('wex-drag-over');
+}
+function wexItemDrop(e, day, targetIdx) {
+  e.preventDefault(); e.stopPropagation();
+  e.currentTarget.classList.remove('wex-drag-over');
+  if (_wexDragIdx === null) return;
+  const srcDay = _wexDragDay, srcIdx = _wexDragIdx;
+  _wexDragDay = null; _wexDragIdx = null;
+  if (!Array.isArray(scheduleData[day].workout)) scheduleData[day].workout = [];
+  const ex = scheduleData[srcDay].workout.splice(srcIdx, 1)[0];
+  const adj = srcDay === day && targetIdx > srcIdx ? targetIdx - 1 : targetIdx;
+  scheduleData[day].workout.splice(adj, 0, ex);
+  saveSchedule(); saveCurrentWeek(); renderSchedule();
+}
+function wexCardDragOver(e) {
+  if (_wexDragIdx === null) return;
+  e.preventDefault(); e.stopPropagation();
+  e.currentTarget.classList.add('wex-card-over');
+}
+function wexCardDrop(e, day) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('wex-card-over');
+  if (_wexDragIdx === null) return;
+  const srcDay = _wexDragDay, srcIdx = _wexDragIdx;
+  _wexDragDay = null; _wexDragIdx = null;
+  if (srcDay === day) return;
+  if (!Array.isArray(scheduleData[day].workout)) scheduleData[day].workout = [];
+  const ex = scheduleData[srcDay].workout.splice(srcIdx, 1)[0];
+  scheduleData[day].workout.push(ex);
+  saveSchedule(); saveCurrentWeek(); renderSchedule();
 }
 function saveWorkoutEdit(day,idx,field,val){ scheduleData[day].workout[idx][field]=val; saveSchedule(); saveCurrentWeek(); }
 function deleteWorkoutEx(day,idx){ scheduleData[day].workout.splice(idx,1); saveSchedule(); saveCurrentWeek(); renderSchedule(); }
@@ -5948,12 +6078,8 @@ function renderDailyScheduleView() {
   const d = scheduleData[todayName];
   if (!d) return;
 
-  // Build full list including work block, then sort by time
-  const allBlocks = [
-    ...d.blocks,
-    { type: 'work', time: todayName === 'Wednesday' ? '9:00' : '9:00',
-      label: `Work ${todayName === 'Wednesday' ? '(office, 9–5:30)' : '(remote, 9–5)'}`, isWork: true }
-  ];
+  // Show only blocks that have parseable times, reflecting the schedule tab
+  const allBlocks = d.blocks.filter(b => schedToMins(b.time) < 9999);
 
   const sorted = allBlocks.slice().sort((a, b) => schedToMins(a.time) - schedToMins(b.time));
 
