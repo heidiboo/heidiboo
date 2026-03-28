@@ -1474,11 +1474,16 @@
           </div>
         </div>
         <div class="sidebar-main">
-          <div class="section-header" style="padding-bottom:16px">
+          <div id="sched-normal-header" class="section-header" style="padding-bottom:16px">
             <div class="section-title" id="schedule-week-title">This week</div>
             <div style="display:flex;gap:8px">
+              <button class="btn" onclick="editBaseline()" style="font-size:11px;padding:5px 12px;border:1px solid var(--border);background:transparent;color:var(--ink2)">✎ Edit baseline</button>
               <button class="btn" onclick="copyBaselineToWeek(currentScheduleWeek)" style="font-size:11px;padding:5px 12px;border:1px solid var(--border);background:transparent;color:var(--ink2)">↺ Reset to baseline</button>
             </div>
+          </div>
+          <div id="sched-baseline-banner" style="display:none;align-items:center;justify-content:space-between;padding:10px 16px;margin-bottom:16px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px">
+            <span style="font-size:12px;color:#92400E;font-family:var(--mono)">✎ Editing baseline template — changes save automatically</span>
+            <button onclick="exitBaseline()" style="font-size:11px;padding:4px 10px;background:#1A1A1A;color:#F9F7F3;border:none;border-radius:5px;cursor:pointer;font-family:var(--sans)">Done</button>
           </div>
           <div class="schedule-wrap" id="schedule-wrap"></div>
         </div>
@@ -1811,6 +1816,7 @@ const SUPA_MAP = {
   projects:        { table:'projects', id:'projects' },
   scheduleData:    { table:'schedule', id:'current' },
   scheduleHistory: { table:'schedule', id:'history' },
+  scheduleBaseline:{ table:'schedule', id:'baseline' },
   workGoals:       { table:'settings', id:'workGoals' },
   personalGoals:   { table:'settings', id:'personalGoals' },
   notes:           { table:'settings', id:'notes' },
@@ -1858,8 +1864,9 @@ async function loadFromSupabase() {
   // schedule
   if (schedRes.data) {
     schedRes.data.forEach(row => {
-      if (row.week_key === 'current') saveLocal('scheduleData', row.data);
-      if (row.week_key === 'history') saveLocal('scheduleHistory', row.data);
+      if (row.week_key === 'current')  saveLocal('scheduleData', row.data);
+      if (row.week_key === 'history')  saveLocal('scheduleHistory', row.data);
+      if (row.week_key === 'baseline') saveLocal('scheduleBaseline', row.data);
     });
   }
   // settings
@@ -3136,7 +3143,7 @@ function renderDocs(filterProject) {
       <div class="doc-card-title">${d.title || 'Untitled'}</div>
       <div class="doc-card-preview">${summary || '<span style="color:var(--border)">No content yet</span>'}</div>
       <div class="doc-card-meta">
-        <span>${d.updatedAt || ''}</span>
+        <span>${d.createdAt || ''}${d.updatedAt && d.updatedAt !== d.createdAt ? ' · edited ' + d.updatedAt : ''}</span>
         ${d.folder ? `<span class="doc-card-project">${(docFolders.find(f=>f.id===d.folder)||{}).name||''}</span>` : d.project ? `<span class="doc-card-project">${d.project}</span>` : ''}
       </div>
     </div>
@@ -5230,14 +5237,42 @@ const DEFAULT_SCHEDULE = {
 
 const DAY_ORDER = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 let scheduleData = {};
+let _editingBaseline = false;
+
+function getBaseline() {
+  return load('scheduleBaseline', null) || JSON.parse(JSON.stringify(DEFAULT_SCHEDULE));
+}
 
 function loadSchedule() {
   const saved = load('scheduleData', null);
-  scheduleData = saved ? saved : JSON.parse(JSON.stringify(DEFAULT_SCHEDULE));
+  scheduleData = saved ? saved : JSON.parse(JSON.stringify(getBaseline()));
   if (!saved) save('scheduleData', scheduleData);
 }
 
-function saveSchedule() { save('scheduleData', scheduleData); }
+function saveSchedule() {
+  if (_editingBaseline) {
+    save('scheduleBaseline', scheduleData);
+    return;
+  }
+  save('scheduleData', scheduleData);
+}
+
+function editBaseline() {
+  _editingBaseline = true;
+  scheduleData = JSON.parse(JSON.stringify(getBaseline()));
+  document.getElementById('sched-normal-header').style.display = 'none';
+  document.getElementById('sched-baseline-banner').style.display = 'flex';
+  renderSchedule();
+}
+
+function exitBaseline() {
+  _editingBaseline = false;
+  // Restore current week data
+  scheduleData = JSON.parse(JSON.stringify(scheduleHistory[currentScheduleWeek] || getBaseline()));
+  document.getElementById('sched-normal-header').style.display = 'flex';
+  document.getElementById('sched-baseline-banner').style.display = 'none';
+  renderSchedule();
+}
 
 // ---- POMODORO ----
 const POMO_DURATIONS = { focus: 25*60, short: 5*60, long: 15*60 };
@@ -5365,7 +5400,7 @@ function loadScheduleHistory() {
 }
 
 function saveCurrentWeek() {
-  if (!currentScheduleWeek) return;
+  if (_editingBaseline || !currentScheduleWeek) return;
   scheduleHistory[currentScheduleWeek] = JSON.parse(JSON.stringify(scheduleData));
   save('scheduleHistory', scheduleHistory);
 }
@@ -5375,7 +5410,7 @@ function switchScheduleWeek(wk) {
   saveCurrentWeek();
   currentScheduleWeek = wk;
   // Load that week's data into scheduleData
-  scheduleData = JSON.parse(JSON.stringify(scheduleHistory[wk] || DEFAULT_SCHEDULE));
+  scheduleData = JSON.parse(JSON.stringify(scheduleHistory[wk] || getBaseline()));
   renderSchedule();
   renderScheduleSidebar();
   const titleEl = document.getElementById('schedule-week-title');
@@ -5385,7 +5420,7 @@ function switchScheduleWeek(wk) {
 
 function copyBaselineToWeek(wk) {
   if (!wk) return;
-  scheduleData = JSON.parse(JSON.stringify(DEFAULT_SCHEDULE));
+  scheduleData = JSON.parse(JSON.stringify(getBaseline()));
   saveCurrentWeek();
   renderSchedule();
 }
