@@ -1372,6 +1372,33 @@
   </div>
 </div>
 
+<!-- Image picker popup -->
+<div id="img-picker-popup" style="display:none;position:fixed;z-index:800;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-lg);width:380px;padding:16px;backdrop-filter:blur(8px)">
+  <div style="font-family:var(--mono);font-size:8px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink2);margin-bottom:12px">Add image</div>
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;font-size:13px;color:var(--ink);transition:border-color 0.15s" onmouseover="this.style.borderColor='var(--ink)'" onmouseout="this.style.borderColor='var(--border)'">
+      <span style="font-size:18px">🖥</span>
+      <div>
+        <div style="font-weight:500;font-size:13px">Upload from computer</div>
+        <div style="font-size:11px;color:var(--ink2)">JPG, PNG, GIF, WebP</div>
+      </div>
+      <input type="file" accept="image/*" style="display:none" onchange="handleImgPickerUpload(event)">
+    </label>
+    <div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px">
+      <div style="font-size:11px;color:var(--ink2);margin-bottom:6px;font-family:var(--mono);letter-spacing:0.06em;text-transform:uppercase">Paste image URL</div>
+      <div style="display:flex;gap:8px">
+        <input id="img-picker-url" type="url" placeholder="https://example.com/image.jpg"
+          style="flex:1;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:var(--sans);background:var(--bg);color:var(--ink);outline:none"
+          onfocus="this.style.borderColor='var(--ink)'" onblur="this.style.borderColor='var(--border)'"
+          onkeydown="if(event.key==='Enter')confirmImgUrl();if(event.key==='Escape')closeImgPicker()">
+        <button onclick="confirmImgUrl()" style="padding:7px 14px;background:var(--ink);color:#F9F7F3;border:none;border-radius:var(--radius-sm);font-size:12px;cursor:pointer">Insert</button>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--ink2);text-align:center">or paste an image directly with ⌘V</div>
+  </div>
+  <button onclick="closeImgPicker()" style="position:absolute;top:12px;right:12px;background:none;border:none;font-size:16px;color:var(--ink2);cursor:pointer;padding:2px 6px;border-radius:4px" onmouseover="this.style.background='rgba(0,0,0,0.06)'" onmouseout="this.style.background='none'">✕</button>
+</div>
+
 <div id="folder-modal" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(26,23,20,0.4);align-items:center;justify-content:center">
   <div style="background:var(--surface);border-radius:14px;padding:28px;width:360px;box-shadow:var(--shadow-lg)">
     <div style="font-family:'Playfair Display',serif;font-size:1.2rem;font-weight:700;margin-bottom:20px">New Folder</div>
@@ -3060,6 +3087,8 @@ function setupEditor() {
   editor.addEventListener('paste', function(e) {
     const items = e.clipboardData?.items;
     if (!items) return;
+
+    // 1. Raw image data (copy image from Figma, screenshot, etc)
     for (const item of items) {
       if (item.type.startsWith('image/')) {
         e.preventDefault();
@@ -3067,8 +3096,9 @@ function setupEditor() {
         const reader = new FileReader();
         reader.onload = ev => {
           const wrap = buildImgWrap(ev.target.result);
-          if (sel2.rangeCount) {
-            const range = sel2.getRangeAt(0);
+          const sel = window.getSelection();
+          if (sel.rangeCount) {
+            const range = sel.getRangeAt(0);
             range.deleteContents();
             range.insertNode(wrap);
             const p = document.createElement('p');
@@ -3076,13 +3106,33 @@ function setupEditor() {
             wrap.insertAdjacentElement('afterend', p);
             const nr = document.createRange();
             nr.setStart(p,0); nr.collapse(true);
-            sel2.removeAllRanges(); sel2.addRange(nr);
+            sel.removeAllRanges(); sel.addRange(nr);
           }
           autoSaveDoc();
         };
         reader.readAsDataURL(file);
-        break;
+        return;
       }
+    }
+
+    // 2. Pasted text that looks like an image URL (copy image address from browser)
+    const text = e.clipboardData.getData('text/plain')?.trim();
+    if (text && /^https?:\/\/.+\.(jpg|jpeg|png|gif|webp|svg|bmp|avif)(\?.*)?$/i.test(text)) {
+      e.preventDefault();
+      const wrap = buildImgWrap(text);
+      const sel = window.getSelection();
+      if (sel.rangeCount) {
+        const range = sel.getRangeAt(0);
+        range.deleteContents();
+        range.insertNode(wrap);
+        const p = document.createElement('p');
+        p.innerHTML = '<br>';
+        wrap.insertAdjacentElement('afterend', p);
+        const nr = document.createRange();
+        nr.setStart(p,0); nr.collapse(true);
+        sel.removeAllRanges(); sel.addRange(nr);
+      }
+      autoSaveDoc();
     }
   });
 
@@ -3541,22 +3591,76 @@ function closeBookmarkPopup() {
   document.getElementById('bookmark-popup').style.display = 'none';
 }
 
+let _imgPickerSavedRange = null;
+
 function promptImage() {
-  // Show inline image picker panel
-  const imgId = 'img_' + Date.now();
-  const html = `<div class="doc-img-picker" id="picker_${imgId}" contenteditable="false">
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <label style="padding:7px 14px;background:var(--ink);color:#F9F7F3;border-radius:6px;font-size:12px;cursor:pointer;font-family:var(--sans)">
-        Upload file <input type="file" accept="image/*" style="display:none" onchange="handleImgUpload(event,'picker_${imgId}')">
-      </label>
-      <input type="url" placeholder="Or paste image URL..." onkeydown="if(event.key==='Enter')insertImgFromUrl(this,'picker_${imgId}')"
-        style="flex:1;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--sans);background:var(--bg);color:var(--ink);outline:none;min-width:180px">
-      <button onclick="insertImgFromUrl(this.previousElementSibling,'picker_${imgId}')" style="padding:7px 12px;border:1px solid var(--border);border-radius:6px;font-size:12px;cursor:pointer;background:transparent;color:var(--ink)">Insert</button>
-      <button onclick="document.getElementById('picker_${imgId}').remove()" style="padding:7px 8px;border:none;background:none;font-size:14px;color:var(--ink2);cursor:pointer">✕</button>
-    </div>
-    <div style="font-size:11px;color:var(--ink2);margin-top:6px">Or paste an image anywhere in the doc with ⌘V</div>
-  </div><p><br></p>`;
-  fmtExec('insertHTML', html);
+  // Save cursor so we can insert after popup closes
+  const sel = window.getSelection();
+  if (sel.rangeCount) _imgPickerSavedRange = sel.getRangeAt(0).cloneRange();
+
+  const popup = document.getElementById('img-picker-popup');
+  const urlInput = document.getElementById('img-picker-url');
+  urlInput.value = '';
+
+  // Position near cursor
+  if (_imgPickerSavedRange) {
+    const rect = _imgPickerSavedRange.getBoundingClientRect();
+    popup.style.left = Math.min(rect.left, window.innerWidth - 400) + 'px';
+    popup.style.top  = Math.min(rect.bottom + 8, window.innerHeight - 260) + 'px';
+  } else {
+    popup.style.left = '50%';
+    popup.style.top  = '40%';
+    popup.style.transform = 'translate(-50%,-50%)';
+  }
+  popup.style.display = 'block';
+  setTimeout(() => urlInput.focus(), 50);
+}
+
+function closeImgPicker() {
+  document.getElementById('img-picker-popup').style.display = 'none';
+}
+
+function handleImgPickerUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  closeImgPicker();
+  const reader = new FileReader();
+  reader.onload = ev => insertImgAtSavedRange(ev.target.result);
+  reader.readAsDataURL(file);
+}
+
+function confirmImgUrl() {
+  const url = document.getElementById('img-picker-url').value.trim();
+  if (!url) return;
+  closeImgPicker();
+  insertImgAtSavedRange(url);
+}
+
+function insertImgAtSavedRange(src) {
+  const wrap = buildImgWrap(src);
+  // Restore saved cursor position
+  if (_imgPickerSavedRange) {
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(_imgPickerSavedRange);
+  }
+  const sel = window.getSelection();
+  if (sel.rangeCount) {
+    const range = sel.getRangeAt(0);
+    range.deleteContents();
+    range.insertNode(wrap);
+    const p = document.createElement('p');
+    p.innerHTML = '<br>';
+    wrap.insertAdjacentElement('afterend', p);
+    const nr = document.createRange();
+    nr.setStart(p, 0); nr.collapse(true);
+    sel.removeAllRanges(); sel.addRange(nr);
+  } else {
+    // Fallback — append to editor
+    const editor = document.getElementById('doc-body-input');
+    if (editor) { editor.appendChild(wrap); }
+  }
+  autoSaveDoc();
 }
 
 function handleImgUpload(e, pickerId) {
