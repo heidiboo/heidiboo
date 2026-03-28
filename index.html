@@ -589,7 +589,19 @@
   .doc-card-action-btn { background: rgba(0,0,0,0.05); border: none; border-radius: 5px; padding: 3px 8px; cursor: pointer; font-size: 10px; color: var(--ink2); }
   .doc-card-action-btn:hover { background: rgba(0,0,0,0.1); }
   .doc-card-action-btn.trash:hover { background: #FEE2E2; color: #E74C3C; }
-  .doc-card-title { font-weight: 600; font-size: 13px; margin-bottom: 5px; }
+  .doc-card-action-btn.lock-btn:hover { background: #EEF2FF; color: #4F46E5; }
+  .doc-card-lock-badge { position: absolute; top: 10px; left: 12px; font-size: 11px; opacity: 0.55; pointer-events: none; }
+  .doc-card.locked .doc-card-preview { filter: blur(4px); user-select: none; pointer-events: none; opacity: 0.6; }
+  /* Doc lock modal */
+  #doc-lock-modal { position: fixed; inset: 0; z-index: 600; background: rgba(0,0,0,0.45); display: none; align-items: center; justify-content: center; backdrop-filter: blur(3px); }
+  .doc-lock-box { background: var(--surface); border-radius: 12px; padding: 28px 32px; width: 320px; box-shadow: 0 8px 40px rgba(0,0,0,0.18); }
+  .doc-lock-title { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+  .doc-lock-sub { font-size: 11px; color: var(--ink2); margin-bottom: 18px; }
+  .doc-lock-input { width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-size: 13px; font-family: var(--sans); outline: none; box-sizing: border-box; }
+  .doc-lock-input:focus { border-color: var(--ink); }
+  .doc-lock-error { font-size: 11px; color: #E74C3C; margin-top: 6px; min-height: 16px; }
+  .doc-lock-btns { display: flex; gap: 8px; margin-top: 16px; }
+  .doc-lock-title { font-weight: 600; font-size: 13px; margin-bottom: 5px; }
   .doc-card-preview { font-size: 11px; color: var(--ink2); line-height: 1.5; flex: 1; }
   .doc-card-meta { font-size: 10px; color: var(--ink2); margin-top: 10px; display: flex; align-items: center; justify-content: space-between; }
   .doc-card-project { font-size: 9px; background: rgba(0,0,0,0.05); color: var(--ink2); padding: 2px 7px; border-radius: 10px; }
@@ -1046,7 +1058,66 @@
     font-family: var(--sans); color: var(--ink2); transition: all 0.1s;
   }
   .workout-type-btn:hover { background: var(--ink); color: #F9F7F3; border-color: var(--ink); }
-  /* Routine workouts view */
+  /* Day header "+" workout button */
+  .sday-add-workout-wrap { position: relative; flex-shrink: 0; }
+  .sday-add-workout-btn {
+    width: 28px; height: 28px; border-radius: 50%; border: 1.5px dashed var(--border);
+    background: transparent; cursor: pointer; font-size: 16px; color: var(--ink2);
+    display: flex; align-items: center; justify-content: center; transition: all 0.15s;
+    line-height: 1; padding: 0;
+  }
+  .sday-add-workout-btn:hover { border-color: var(--ink); color: var(--ink); background: rgba(0,0,0,0.04); }
+  .sday-workout-dropdown {
+    position: absolute; top: 34px; right: 0; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 8px; padding: 6px;
+    flex-wrap: wrap; gap: 4px; min-width: 180px; z-index: 100;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  }
+  /* Complete button */
+  .workout-complete-row { padding: 8px 14px 4px; border-top: 1px solid var(--border); margin-top: 4px; }
+  .workout-complete-btn {
+    width: 100%; padding: 7px; background: transparent; border: 1.5px solid #3a8a3a;
+    border-radius: 6px; color: #3a8a3a; font-size: 11px; cursor: pointer;
+    font-family: var(--sans); font-weight: 600; transition: all 0.15s;
+  }
+  .workout-complete-btn:hover { background: #3a8a3a; color: #fff; }
+  /* Workout done / celebration card */
+  .sched-workout-done-card {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 12px; padding: 24px 18px; text-align: center; min-height: 180px;
+    background: linear-gradient(135deg, #FFFBEB 0%, #FEF9F3 100%);
+    border-color: #FDE68A !important;
+  }
+  .workout-done-sprite { flex-shrink: 0; }
+  .workout-done-title { font-size: 14px; font-weight: 700; color: var(--ink); }
+  .workout-done-sub { font-size: 12px; color: var(--ink2); margin-top: 2px; }
+  /* Workout template cards */
+  .wtpl-wrap { padding: 24px 32px 48px; }
+  .wtpl-header-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+  .wtpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+  .wtpl-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px 18px; position: relative; transition: border-color 0.15s;
+  }
+  .wtpl-card:hover { border-color: var(--ink); }
+  .wtpl-del {
+    position: absolute; top: 10px; right: 10px; background: none; border: none;
+    font-size: 12px; color: var(--ink2); cursor: pointer; padding: 3px 6px;
+    border-radius: 4px; opacity: 0; transition: opacity 0.15s, color 0.1s;
+  }
+  .wtpl-card:hover .wtpl-del { opacity: 1; }
+  .wtpl-del:hover { color: #E74C3C; }
+  .wtpl-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .wtpl-name-input {
+    flex: 1; border: none; outline: none; font-family: var(--mono); font-size: 13px;
+    font-weight: 700; background: transparent; color: var(--ink); min-width: 0;
+  }
+  .wtpl-type-select {
+    font-size: 10px; padding: 2px 6px; border: 1px solid var(--border); border-radius: 10px;
+    background: transparent; color: var(--ink2); font-family: var(--sans); cursor: pointer;
+  }
+  .wtpl-exercises { margin-bottom: 10px; }
+  /* Routine workouts view (legacy - kept for fallback) */
   .routine-workouts-wrap { padding: 24px 32px 48px; }
   .routine-workout-day { margin-bottom: 32px; }
   .routine-workout-day-header {
@@ -1593,7 +1664,7 @@
           </div>
           <div id="sched-baseline-banner" style="display:none;align-items:center;justify-content:space-between;padding:10px 16px;margin-bottom:16px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px">
             <span id="sched-baseline-banner-text" style="font-size:12px;color:#92400E;font-family:var(--mono)">✎ Editing baseline template — changes save automatically</span>
-            <button onclick="exitRoutineView()" style="font-size:11px;padding:4px 10px;background:#1A1A1A;color:#F9F7F3;border:none;border-radius:5px;cursor:pointer;font-family:var(--sans)">← Back</button>
+            <button id="sched-banner-btn" onclick="exitRoutineView()" style="font-size:11px;padding:4px 10px;background:#1A1A1A;color:#F9F7F3;border:none;border-radius:5px;cursor:pointer;font-family:var(--sans)">Done</button>
           </div>
           <div class="schedule-wrap" id="schedule-wrap"></div>
         </div>
@@ -1602,6 +1673,9 @@
 
   </main>
 </div><!-- /work-app -->
+
+<!-- SAVE SPRITE CANVAS OVERLAY -->
+<canvas id="sched-save-canvas" style="position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:9999;display:none"></canvas>
 
 <!-- CONTROL CENTER DRAWER -->
 <div id="cc-overlay" onclick="closeControlCenter()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.3);z-index:8000;backdrop-filter:blur(2px)"></div>
@@ -1653,6 +1727,21 @@
   </div>
 </div>
 
+
+<!-- DOC LOCK MODAL -->
+<div id="doc-lock-modal" onclick="if(event.target===this)closeDocLockModal()">
+  <div class="doc-lock-box">
+    <div class="doc-lock-title" id="doc-lock-modal-title">🔒 Locked doc</div>
+    <div class="doc-lock-sub" id="doc-lock-modal-sub">Enter your password to unlock</div>
+    <input class="doc-lock-input" id="doc-lock-pw-input" type="password" placeholder="Password"
+      onkeydown="if(event.key==='Enter')submitDocLock()">
+    <div class="doc-lock-error" id="doc-lock-error"></div>
+    <div class="doc-lock-btns">
+      <button class="btn btn-primary" onclick="submitDocLock()" style="flex:1">Unlock</button>
+      <button class="btn" onclick="closeDocLockModal()" style="flex:1">Cancel</button>
+    </div>
+  </div>
+</div>
 
 <div id="doc-modal" style="display:none">
   <div class="doc-editor">
@@ -2449,7 +2538,7 @@ function hideSyncStatus() {
 }
 
 // ---- STATE ----
-let projects = [], workGoals = [], personalGoals = [], cases = [], skills = [], notes = [], todos = [], docs = [], taskDays = [], docFolders = [], trashedDocs = [];
+let projects = [], workGoals = [], personalGoals = [], cases = [], skills = [], notes = [], todos = [], docs = [], taskDays = [], docFolders = [], trashedDocs = [], lockedDocs = [];
 let currentDocId = null;
 let currentProjectFilter = null;
 
@@ -2471,6 +2560,7 @@ function loadAll() {
   taskDays = load('taskDays', []);
   docFolders = load('docFolders', []);
   trashedDocs = load('trashedDocs', []);
+  lockedDocs = load('lockedDocs', []);
   // Auto-purge trash older than 30 days
   const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
   trashedDocs = trashedDocs.filter(d => d.trashedAt > cutoff);
@@ -3239,19 +3329,22 @@ function renderDocs(filterProject) {
     return;
   }
   el.innerHTML = list.map(d => {
+    const isLocked = (lockedDocs||[]).includes(d.id);
     const plainText = (d.body || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
     const summary = plainText.slice(0, 120) + (plainText.length > 120 ? '…' : '');
     return `
-    <div class="doc-card" onclick="openDoc('${d.id}')">
+    <div class="doc-card${isLocked?' locked':''}" onclick="${isLocked?`openDocLockModal('${d.id}')`:`openDoc('${d.id}')`}">
+      ${isLocked ? '<div class="doc-card-lock-badge">🔒</div>' : ''}
       <div class="doc-card-actions" onclick="event.stopPropagation()">
         <select class="doc-card-action-btn" onchange="moveDocToFolder('${d.id}',this.value);this.value=''" title="Move to folder">
           <option value="">Move…</option>
           ${docFolders.map(f => `<option value="${f.id}">${f.name}</option>`).join('')}
         </select>
+        <button class="doc-card-action-btn lock-btn" onclick="toggleDocLock('${d.id}')" title="${isLocked?'Unlock':'Lock'}">${isLocked?'🔓 Unlock':'🔒 Lock'}</button>
         <button class="doc-card-action-btn trash" onclick="trashDoc('${d.id}')" title="Move to trash">🗑</button>
       </div>
-      <div class="doc-card-title">${d.title || 'Untitled'}</div>
-      <div class="doc-card-preview">${summary || '<span style="color:var(--border)">No content yet</span>'}</div>
+      <div class="doc-card-title">${isLocked ? '••••••••' : (d.title || 'Untitled')}</div>
+      <div class="doc-card-preview">${isLocked ? '<span style="filter:blur(4px)">Locked content hidden</span>' : (summary || '<span style="color:var(--border)">No content yet</span>')}</div>
       <div class="doc-card-meta">
         <span>${d.createdAt || ''}${d.updatedAt && d.updatedAt !== d.createdAt ? ' · edited ' + d.updatedAt : ''}</span>
         ${d.folder ? `<span class="doc-card-project">${(docFolders.find(f=>f.id===d.folder)||{}).name||''}</span>` : d.project ? `<span class="doc-card-project">${d.project}</span>` : ''}
@@ -3263,6 +3356,47 @@ function renderDocs(filterProject) {
 function moveDocToFolder(docId, folderId) {
   const idx = docs.findIndex(d => d.id === docId);
   if (idx > -1) { docs[idx].folder = folderId; save('docs', docs); renderDocs(); renderFolders(); }
+}
+
+function toggleDocLock(docId) {
+  const idx = lockedDocs.indexOf(docId);
+  if (idx > -1) { lockedDocs.splice(idx, 1); }
+  else { lockedDocs.push(docId); }
+  save('lockedDocs', lockedDocs);
+  renderDocs();
+}
+
+let _docLockPendingId = null;
+function openDocLockModal(docId) {
+  _docLockPendingId = docId;
+  const modal = document.getElementById('doc-lock-modal');
+  const doc = docs.find(d => d.id === docId);
+  document.getElementById('doc-lock-modal-title').textContent = '🔒 ' + (doc?.title || 'Locked Doc');
+  document.getElementById('doc-lock-modal-sub').textContent = 'Enter your password to open this doc';
+  document.getElementById('doc-lock-error').textContent = '';
+  const inp = document.getElementById('doc-lock-pw-input');
+  inp.value = '';
+  modal.style.display = 'flex';
+  setTimeout(() => inp.focus(), 50);
+}
+
+function closeDocLockModal() {
+  document.getElementById('doc-lock-modal').style.display = 'none';
+  _docLockPendingId = null;
+}
+
+async function submitDocLock() {
+  const pw = document.getElementById('doc-lock-pw-input').value;
+  if (!pw) return;
+  const errEl = document.getElementById('doc-lock-error');
+  errEl.textContent = '';
+  // Verify via Supabase password check
+  const userEmail = (await sb.auth.getUser()).data?.user?.email;
+  if (!userEmail) { errEl.textContent = 'Not signed in'; return; }
+  const { error } = await sb.auth.signInWithPassword({ email: userEmail, password: pw });
+  if (error) { errEl.textContent = 'Incorrect password'; return; }
+  closeDocLockModal();
+  openDoc(_docLockPendingId);
 }
 
 function trashDoc(id) {
@@ -5387,8 +5521,196 @@ function exitRoutineView() {
   document.querySelectorAll('#routine-weekly-item,#routine-workouts-item').forEach(el=>el.classList.remove('routine-active'));
   exitBaseline();
 }
+
+function saveWeeklyScheduleAndAnimate() {
+  saveSchedule(); // routes to baseline because _editingBaseline=true
+  startSaveSprite(() => exitRoutineView());
+}
+
+function startSaveSprite(onDone) {
+  const cv = document.getElementById('sched-save-canvas');
+  if (!cv) { if (onDone) onDone(); return; }
+  cv.style.display = 'block';
+  const ctx = cv.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  function rsz() {
+    cv.width = cv.offsetWidth * dpr;
+    cv.height = cv.offsetHeight * dpr;
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.scale(dpr, dpr);
+  }
+  rsz();
+  const W = () => cv.offsetWidth;
+  const H = () => cv.offsetHeight;
+
+  // Find Save button position for target stop
+  const btn = document.getElementById('sched-banner-btn');
+  const btnRect = btn ? btn.getBoundingClientRect() : null;
+  const targetX = btnRect ? Math.max(btnRect.left - 55, 60) : W() * 0.6;
+  const groundY = H() - 28;
+
+  const sp = { x: W() + 55, ph: 'walk-in', pt: 0, jy: 0, jvy: 0, jn: 0 };
+  const GRAVITY = 820, NJUMPS = 3;
+
+  function tick(dt) {
+    sp.pt += dt;
+    if (sp.ph === 'walk-in') {
+      sp.x -= 145 * dt;
+      if (sp.x <= targetX) { sp.x = targetX; sp.ph = 'prejump'; sp.pt = 0; }
+    } else if (sp.ph === 'prejump') {
+      if (sp.pt >= 0.15) { sp.ph = 'jump'; sp.pt = 0; sp.jvy = -295; sp.jn = 0; }
+    } else if (sp.ph === 'jump') {
+      sp.jvy += GRAVITY * dt; sp.jy += sp.jvy * dt;
+      if (sp.jy >= 0) {
+        sp.jy = 0; sp.jvy = 0; sp.jn++;
+        if (sp.jn < NJUMPS) { sp.jvy = -265 - sp.jn * 15; }
+        else { sp.ph = 'pause'; sp.pt = 0; }
+      }
+    } else if (sp.ph === 'pause') {
+      if (sp.pt >= 0.5) { sp.ph = 'walk-out'; sp.pt = 0; }
+    } else if (sp.ph === 'walk-out') {
+      sp.x += 155 * dt;
+    }
+  }
+
+  function drawSaveSprite(x, tSec, ph, jy) {
+    const air = jy < -4;
+    const walk = ph === 'walk-in' || ph === 'walk-out';
+    const squat = ph === 'prejump';
+    const airAmt = air ? Math.min(1, Math.abs(jy) / 40) : 0;
+    const walkCycle = walk ? tSec * 6.5 : 0;
+    const legSwing = walk ? Math.sin(walkCycle * Math.PI) : 0;
+
+    ctx.save();
+    ctx.translate(x, groundY + jy);
+
+    // shadow
+    const ss = Math.max(0.2, 1 + jy / 110);
+    ctx.beginPath(); ctx.ellipse(0, -jy * 0.1 + 15, 13 * ss, 3 * ss, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.08)'; ctx.fill();
+
+    // fuzz body
+    const R = 18, SPIKES = 28;
+    for (let i = 0; i < SPIKES; i++) {
+      const a = (i / SPIKES) * Math.PI * 2;
+      const slen = 3 + Math.sin(i * 2.1 + tSec * 4) * 1.2;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * (R - 1), Math.sin(a) * (R - 1));
+      ctx.lineTo(Math.cos(a) * (R + slen), Math.sin(a) * (R + slen));
+      ctx.strokeStyle = '#0d0d0d'; ctx.lineWidth = 1.5; ctx.lineCap = 'round'; ctx.stroke();
+    }
+    ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.fillStyle = '#1A1A1A'; ctx.fill();
+
+    // eyes — happy squint when dancing
+    const dancing = ph === 'jump' || ph === 'pause';
+    const sqS = squat ? 0.35 : 1, sqOY = squat ? 1.5 : 0;
+    if (dancing && air) {
+      // wide happy eyes
+      ctx.beginPath(); ctx.arc(-7.5, -5, 5.5, 0, Math.PI * 2); ctx.fillStyle = '#E2DED8'; ctx.fill();
+      ctx.beginPath(); ctx.arc(7.5, -5, 5.5, 0, Math.PI * 2); ctx.fillStyle = '#E2DED8'; ctx.fill();
+      ctx.beginPath(); ctx.arc(-7.5, -4.5, 3.6, 0, Math.PI * 2); ctx.fillStyle = '#111'; ctx.fill();
+      ctx.beginPath(); ctx.arc(7.5, -4.5, 3.6, 0, Math.PI * 2); ctx.fillStyle = '#111'; ctx.fill();
+      // sparkle highlights
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.beginPath(); ctx.arc(-6.5, -5.8, 1.3, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(8.4, -5.8, 1.3, 0, Math.PI * 2); ctx.fill();
+    } else {
+      ctx.beginPath(); ctx.arc(-7.5, -5 + sqOY, 5.5 * sqS, 0, Math.PI * 2); ctx.fillStyle = '#E2DED8'; ctx.fill();
+      ctx.beginPath(); ctx.arc(7.5, -5 + sqOY, 5.5 * sqS, 0, Math.PI * 2); ctx.fillStyle = '#E2DED8'; ctx.fill();
+      ctx.beginPath(); ctx.arc(-7.5, -4.5 + sqOY, 3.6 * sqS, 0, Math.PI * 2); ctx.fillStyle = '#111'; ctx.fill();
+      ctx.beginPath(); ctx.arc(7.5, -4.5 + sqOY, 3.6 * sqS, 0, Math.PI * 2); ctx.fillStyle = '#111'; ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.beginPath(); ctx.arc(-6.5, -5.8 + sqOY, 1.2 * sqS, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(8.4, -5.8 + sqOY, 1.2 * sqS, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // arms up when jumping
+    if (airAmt > 0) {
+      ctx.strokeStyle = '#111'; ctx.lineCap = 'round'; ctx.lineWidth = 2;
+      const lAng = (Math.PI / 2) - airAmt * Math.PI * 0.85;
+      ctx.beginPath(); ctx.moveTo(-17, 0); ctx.lineTo(-17 + Math.cos(lAng) * 12, Math.sin(lAng) * 12);
+      ctx.lineTo(-17 + Math.cos(lAng) * 21, Math.sin(lAng - 0.4) * 21); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(17, 0); ctx.lineTo(17 - Math.cos(lAng) * 12, Math.sin(lAng) * 12);
+      ctx.lineTo(17 - Math.cos(lAng) * 21, Math.sin(lAng - 0.4) * 21); ctx.stroke();
+    }
+
+    // legs
+    ctx.lineWidth = 2;
+    [{ bx: -10, s: 1 }, { bx: -3, s: -1 }, { bx: 3, s: 1 }, { bx: 10, s: -1 }].forEach(l => {
+      const sw = walk ? legSwing * l.s : 0;
+      const angle = 1.45 + sw * 0.5 + (air ? -0.15 : 0) + (squat ? 0.2 : 0);
+      const kx = l.bx + Math.cos(angle) * 10, ky = 16 + Math.sin(angle) * 10;
+      const fx = kx + Math.cos(angle + 0.5 + sw * 0.22) * 8, fy = ky + Math.sin(angle + 0.5 + sw * 0.22) * 8;
+      ctx.beginPath(); ctx.moveTo(l.bx, 15); ctx.lineTo(kx, ky); ctx.lineTo(fx, fy);
+      ctx.strokeStyle = '#111'; ctx.stroke();
+    });
+
+    ctx.restore();
+  }
+
+  // small confetti burst on first jump
+  const conf = Array.from({ length: 40 }, () => ({ x: 0, y: 0, vx: 0, vy: 0, r: 0, rv: 0, w: 0, h: 0, c: '', on: false, sh: 0 }));
+  const CONF = ['#1A1A1A', '#666', '#BBB', 'rgba(255,180,80,0.8)', 'rgba(100,180,255,0.8)'];
+  let confA = 0, confBurst = false;
+  function confBoom(sx, sy) {
+    confA = 1;
+    conf.forEach(p => {
+      p.x = sx + (Math.random() - 0.5) * 50; p.y = sy;
+      p.vx = (Math.random() - 0.5) * 5; p.vy = -(3 + Math.random() * 4);
+      p.r = Math.random() * Math.PI * 2; p.rv = (Math.random() - 0.5) * 0.18;
+      p.w = 3 + Math.random() * 5; p.h = 2 + Math.random() * 3;
+      p.c = CONF[Math.floor(Math.random() * CONF.length)];
+      p.sh = Math.floor(Math.random() * 3); p.on = true;
+    });
+  }
+
+  let startTs = null, lastTs = null;
+  function loop(ts) {
+    if (!startTs) { startTs = ts; lastTs = ts; }
+    const dt = Math.min((ts - lastTs) / 1000, 0.05); lastTs = ts;
+    const tSec = (ts - startTs) / 1000;
+
+    rsz();
+    ctx.clearRect(0, 0, W(), H());
+
+    // trigger confetti on first jump
+    if (sp.ph === 'jump' && !confBurst && sp.jy < -10) {
+      confBurst = true; confBoom(sp.x, groundY + sp.jy);
+    }
+
+    // draw confetti
+    if (confA > 0) {
+      confA = Math.max(0, confA - dt * 0.3);
+      conf.forEach(p => {
+        if (!p.on) return;
+        p.x += p.vx; p.y += p.vy; p.vy += 12 * dt * 60 * dt; p.r += p.rv;
+        if (p.y > H() + 20) { p.on = false; return; }
+        ctx.save(); ctx.globalAlpha = confA * 0.9;
+        ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.fillStyle = p.c;
+        if (p.sh === 0) ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+        else if (p.sh === 1) { ctx.beginPath(); ctx.arc(0, 0, p.w / 2, 0, Math.PI * 2); ctx.fill(); }
+        else { ctx.beginPath(); ctx.moveTo(0, -p.h); ctx.lineTo(p.w / 2, p.h / 2); ctx.lineTo(-p.w / 2, p.h / 2); ctx.closePath(); ctx.fill(); }
+        ctx.restore();
+      });
+    }
+
+    tick(dt);
+    drawSaveSprite(sp.x, tSec, sp.ph, sp.jy);
+
+    if (sp.ph === 'walk-out' && sp.x > W() + 70) {
+      ctx.clearRect(0, 0, W(), H());
+      cv.style.display = 'none';
+      if (onDone) onDone();
+      return;
+    }
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+}
 const WORKOUT_TYPES = ['Push','Pull','Legs','Cardio','Upper','Lower','Full Body','Custom'];
 let _schedMode = 'week';
+let workoutTemplates = load('workoutTemplates', []);
+let _completedDays = {}; // {day: true} for this session
 
 function showRoutineView(view) {
   _schedMode = 'routine-' + view;
@@ -5401,8 +5723,18 @@ function showRoutineView(view) {
   document.getElementById('sched-baseline-banner').style.display = 'flex';
   const bannerText = document.getElementById('sched-baseline-banner-text');
   if (bannerText) bannerText.textContent = view === 'weekly'
-    ? '✎ Weekly Schedule — edits save as your baseline template'
-    : '✎ Workouts — edits save as your baseline template';
+    ? '✎ Weekly Schedule — editing baseline template'
+    : '✎ Workouts — manage your workout templates';
+  const bannerBtn = document.getElementById('sched-banner-btn');
+  if (bannerBtn) {
+    if (view === 'weekly') {
+      bannerBtn.textContent = 'Save';
+      bannerBtn.onclick = saveWeeklyScheduleAndAnimate;
+    } else {
+      bannerBtn.textContent = 'Done';
+      bannerBtn.onclick = exitRoutineView;
+    }
+  }
   if (view === 'weekly') renderSchedule();
   else renderRoutineWorkouts();
 }
@@ -5410,49 +5742,72 @@ function showRoutineView(view) {
 function renderRoutineWorkouts() {
   const wrap = document.getElementById('schedule-wrap');
   if (!wrap) return;
-  wrap.innerHTML = `<div class="routine-workouts-wrap">${DAY_ORDER.map(day => {
-    const d = scheduleData[day];
-    const hasW = Array.isArray(d.workout);
-    const exRows = hasW ? d.workout.map((ex,ei) => `
-      <div class="workout-ex" draggable="true"
-        ondragstart="wexDragStart(event,'${day}',${ei})"
-        ondragover="wexItemDragOver(event,this)"
-        ondragleave="this.classList.remove('wex-drag-over')"
-        ondrop="wexItemDrop(event,'${day}',${ei})">
-        <span class="workout-ex-drag-handle">⠿</span>
-        <input class="workout-ex-name" value="${escHtml(ex.name)}" placeholder="Exercise"
-          onchange="saveWorkoutEdit('${day}',${ei},'name',this.value);saveSchedule()">
-        <input class="workout-ex-sets" value="${escHtml(ex.sets)}" placeholder="Sets × reps"
-          onchange="saveWorkoutEdit('${day}',${ei},'sets',this.value);saveSchedule()">
-        <button class="workout-ex-del" onclick="deleteWorkoutEx('${day}',${ei});renderRoutineWorkouts()">✕</button>
-      </div>`).join('') : '';
-    return `
-    <div class="routine-workout-day">
-      <div class="routine-workout-day-header">
-        <span class="routine-day-name">${day}</span>
-        <span class="sday-tag ${d.tag}">${escHtml(d.tagLabel)}</span>
-        <div style="flex:1"></div>
-        ${hasW ? `<button onclick="deleteWorkout('${day}')" style="background:none;border:none;color:var(--ink3);cursor:pointer;font-size:11px;padding:3px 8px;border-radius:4px;transition:color 0.15s" onmouseover="this.style.color='#E74C3C'" onmouseout="this.style.color='var(--ink3)'">✕ Remove workout</button>` : ''}
+  const cards = workoutTemplates.map((t, ti) => `
+    <div class="wtpl-card" id="wtpl-card-${ti}">
+      <button class="wtpl-del" onclick="deleteWorkoutTemplate(${ti})" title="Delete">✕</button>
+      <div class="wtpl-header">
+        <input class="wtpl-name-input" value="${escHtml(t.name)}" placeholder="Workout name"
+          onchange="workoutTemplates[${ti}].name=this.value;save('workoutTemplates',workoutTemplates)">
+        <select class="wtpl-type-select" onchange="workoutTemplates[${ti}].type=this.value;save('workoutTemplates',workoutTemplates)">
+          ${WORKOUT_TYPES.map(ty=>`<option value="${ty}"${t.type===ty?' selected':''}>${ty}</option>`).join('')}
+        </select>
       </div>
-      ${hasW ? `
-      <div class="sched-workout-card">
-        <div class="workout-header">
-          <div class="workout-label">Workout // ${escHtml(d.tagLabel||'')}</div>
-        </div>
-        <div class="workout-exercises">${exRows}</div>
-        <div class="workout-add-row">
-          <input class="workout-add-name" id="rwadd-name-${day}" placeholder="Add exercise..."
-            onkeydown="if(event.key==='Enter')addRoutineWorkoutEx('${day}')">
-          <input class="workout-add-sets" id="rwadd-sets-${day}" placeholder="3 × 10"
-            onkeydown="if(event.key==='Enter')addRoutineWorkoutEx('${day}')">
-          <button class="workout-add-btn" onclick="addRoutineWorkoutEx('${day}')">Add</button>
-        </div>
-      </div>` : `
-      <div id="rwday-picker-${day}">
-        <button class="routine-add-day-btn" onclick="showAddWorkoutPicker('${day}')">+ Add workout</button>
-      </div>`}
+      <div class="wtpl-exercises">
+        ${(t.exercises||[]).map((ex,ei)=>`
+          <div class="workout-ex">
+            <input class="workout-ex-name" value="${escHtml(ex.name)}" placeholder="Exercise"
+              onchange="workoutTemplates[${ti}].exercises[${ei}].name=this.value;save('workoutTemplates',workoutTemplates)">
+            <input class="workout-ex-sets" value="${escHtml(ex.sets)}" placeholder="Sets × reps"
+              onchange="workoutTemplates[${ti}].exercises[${ei}].sets=this.value;save('workoutTemplates',workoutTemplates)">
+            <button class="workout-ex-del" onclick="workoutTemplates[${ti}].exercises.splice(${ei},1);save('workoutTemplates',workoutTemplates);renderRoutineWorkouts()">✕</button>
+          </div>`).join('')}
+      </div>
+      <div class="workout-add-row">
+        <input class="workout-add-name" id="wtpl-add-name-${ti}" placeholder="Add exercise..."
+          onkeydown="if(event.key==='Enter')addTemplateEx(${ti})">
+        <input class="workout-add-sets" id="wtpl-add-sets-${ti}" placeholder="3 × 10"
+          onkeydown="if(event.key==='Enter')addTemplateEx(${ti})">
+        <button class="workout-add-btn" onclick="addTemplateEx(${ti})">Add</button>
+      </div>
+    </div>`).join('');
+
+  wrap.innerHTML = `
+    <div class="wtpl-wrap">
+      <div class="wtpl-header-bar">
+        <span style="font-size:13px;font-weight:600;color:var(--ink)">Workout Templates</span>
+        <button class="btn btn-primary" style="font-size:11px;padding:5px 12px" onclick="addWorkoutTemplate()">+ Add</button>
+      </div>
+      <div class="wtpl-grid">${cards || '<div style="grid-column:1/-1;font-size:12px;color:var(--ink2);padding:20px 0">No templates yet — click Add to create one</div>'}</div>
     </div>`;
-  }).join('')}</div>`;
+}
+
+function addWorkoutTemplate() {
+  workoutTemplates.push({ id: Date.now()+'', name: 'New Workout', type: 'Push', exercises: [] });
+  save('workoutTemplates', workoutTemplates);
+  renderRoutineWorkouts();
+}
+
+function deleteWorkoutTemplate(ti) {
+  workoutTemplates.splice(ti, 1);
+  save('workoutTemplates', workoutTemplates);
+  renderRoutineWorkouts();
+}
+
+function addTemplateEx(ti) {
+  const n = document.getElementById('wtpl-add-name-'+ti);
+  const s = document.getElementById('wtpl-add-sets-'+ti);
+  if (!n || !n.value.trim()) return;
+  if (!Array.isArray(workoutTemplates[ti].exercises)) workoutTemplates[ti].exercises = [];
+  workoutTemplates[ti].exercises.push({ name: n.value.trim(), sets: s?.value.trim()||'' });
+  n.value = ''; if (s) s.value = '';
+  save('workoutTemplates', workoutTemplates);
+  renderRoutineWorkouts();
+}
+
+function getTemplateByType(type) {
+  // Find latest template matching type (last one in array)
+  const matches = workoutTemplates.filter(t => t.type === type);
+  return matches.length ? matches[matches.length - 1] : null;
 }
 
 function deleteWorkout(day) {
@@ -5486,6 +5841,27 @@ function addWorkout(day, type) {
   saveSchedule(); saveCurrentWeek();
   if (_schedMode === 'routine-workouts') renderRoutineWorkouts();
   else renderSchedule();
+}
+
+function toggleDayWorkoutPicker(day) {
+  const drop = document.getElementById('sday-wdrop-'+day);
+  if (!drop) return;
+  drop.style.display = drop.style.display === 'none' ? 'flex' : 'none';
+}
+
+function addWorkoutFromTemplate(day, type) {
+  const tpl = getTemplateByType(type);
+  scheduleData[day].workout = tpl ? JSON.parse(JSON.stringify(tpl.exercises)) : [];
+  scheduleData[day].tagLabel = tpl ? tpl.name : type;
+  scheduleData[day].tag = 'gym';
+  const drop = document.getElementById('sday-wdrop-'+day);
+  if (drop) drop.style.display = 'none';
+  saveSchedule(); saveCurrentWeek(); renderSchedule();
+}
+
+function completeWorkout(day) {
+  _completedDays[day] = true;
+  renderSchedule();
 }
 
 function addRoutineWorkoutEx(day) {
@@ -6054,12 +6430,103 @@ function renderSchedule() {
     const unplacedHtml = unplaced.length ? `<div class="sched-unplaced"><div class="sched-unplaced-label">Other</div>${unplaced.map(({b,bi})=>mkBlock(b,bi)).join('')}</div>` : '';
     const blocksHtml = timelineHtml + unplacedHtml;
 
+    // If day is "completed", show celebration card
+    if (_completedDays[day] && hasWorkout) {
+      const wName = escHtml(splitLabel[day]||d.tagLabel||'Workout');
+      const workoutHtml = `
+        <div class="sched-workout-card sched-workout-done-card">
+          <div class="workout-done-sprite">
+            <svg viewBox="0 0 80 80" width="72" height="72" xmlns="http://www.w3.org/2000/svg">
+              <!-- soot sprite holding dumbbell, static -->
+              <ellipse cx="40" cy="72" rx="14" ry="3.5" fill="rgba(0,0,0,0.08)"/>
+              <!-- body fuzz -->
+              <circle cx="40" cy="44" r="18" fill="#1A1A1A"/>
+              <circle cx="40" cy="44" r="20" fill="none" stroke="#0d0d0d" stroke-width="3" stroke-dasharray="2,2"/>
+              <!-- eyes -->
+              <ellipse cx="33" cy="40" rx="5" ry="5.5" fill="#E2DED8"/>
+              <ellipse cx="47" cy="40" rx="5" ry="5.5" fill="#E2DED8"/>
+              <circle cx="34" cy="40.5" r="3.5" fill="#111"/>
+              <circle cx="48" cy="40.5" r="3.5" fill="#111"/>
+              <circle cx="35" cy="39" r="1" fill="rgba(255,255,255,0.9)"/>
+              <circle cx="49" cy="39" r="1" fill="rgba(255,255,255,0.9)"/>
+              <!-- smile -->
+              <path d="M35 47 Q40 51 45 47" stroke="#111" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+              <!-- left arm raised holding dumbbell -->
+              <line x1="22" y1="44" x2="14" y2="34" stroke="#111" stroke-width="2.5" stroke-linecap="round"/>
+              <line x1="14" y1="34" x2="10" y2="28" stroke="#111" stroke-width="2.5" stroke-linecap="round"/>
+              <!-- dumbbell -->
+              <line x1="7" y1="25" x2="16" y2="22" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round"/>
+              <rect x="4" y="22" width="5" height="8" rx="1.5" fill="#1A1A1A"/>
+              <rect x="15" y="19" width="5" height="8" rx="1.5" fill="#1A1A1A"/>
+              <!-- right arm relaxed -->
+              <line x1="58" y1="44" x2="64" y2="52" stroke="#111" stroke-width="2.5" stroke-linecap="round"/>
+              <!-- legs -->
+              <line x1="34" y1="62" x2="30" y2="72" stroke="#111" stroke-width="2.5" stroke-linecap="round"/>
+              <line x1="46" y1="62" x2="50" y2="72" stroke="#111" stroke-width="2.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="workout-done-text">
+            <div class="workout-done-title">Great job queen 👑</div>
+            <div class="workout-done-sub">You finished <strong>${wName}</strong> day</div>
+          </div>
+        </div>`;
+      return `
+        <div class="sched-day-section${isToday?' is-today':''}" id="sday-${day}">
+          <div class="sched-day-header">
+            <div style="display:flex;align-items:center;gap:10px;flex:1">
+              <span class="sched-day-name">${day}</span>
+              <span style="font-size:11px;color:var(--ink2);font-family:var(--mono)">${dayDate}</span>
+              <span class="sday-tag ${d.tag}">${escHtml(d.tagLabel)}</span>
+              ${isToday ? '<span class="sday-tag today-tag">Today</span>' : ''}
+            </div>
+            ${getDayIllustration(day)}
+          </div>
+          <div class="sched-day-body">
+            <div class="sched-routine-card">
+              <div class="sched-card-label">Schedule // 7 AM – 11 PM</div>
+              <div class="sched-blocks sched-timeline">${blocksHtml}</div>
+              <div class="sched-add-row">
+                <div class="sched-time-pick">
+                  <input class="sched-add-hour" id="sadd-hour-${day}" type="number" min="1" max="12" placeholder="7">
+                  <span class="sched-time-sep">:</span>
+                  <select class="sched-add-min" id="sadd-min-${day}">
+                    <option value="00">00</option><option value="15">15</option>
+                    <option value="30">30</option><option value="45">45</option>
+                  </select>
+                  <button class="sched-ampm-btn" id="sadd-ampm-${day}" onclick="toggleAmPm('${day}')">AM</button>
+                  <span class="sched-time-arrow">→</span>
+                  <input class="sched-add-hour" id="sadd-ehour-${day}" type="number" min="1" max="12" placeholder="—">
+                  <span class="sched-time-sep">:</span>
+                  <select class="sched-add-min" id="sadd-emin-${day}">
+                    <option value="00">00</option><option value="15">15</option>
+                    <option value="30">30</option><option value="45">45</option>
+                  </select>
+                  <button class="sched-ampm-btn" id="sadd-eampm-${day}" onclick="toggleEndAmPm('${day}')">AM</button>
+                </div>
+                <input class="sched-add-label" id="sadd-label-${day}" placeholder="Add block..."
+                  onkeydown="if(event.key==='Enter')addBlock('${day}')">
+                <button class="sched-add-btn" onclick="addBlock('${day}')">Add</button>
+              </div>
+            </div>
+            ${workoutHtml}
+          </div>
+        </div>`;
+    }
+
+    // No-workout: "+" button in header, schedule full width
+    const noWorkoutHeaderBtn = !hasWorkout ? `
+      <div class="sday-add-workout-wrap" id="sday-wbtn-${day}">
+        <button class="sday-add-workout-btn" onclick="toggleDayWorkoutPicker('${day}')">+</button>
+        <div class="sday-workout-dropdown" id="sday-wdrop-${day}" style="display:none">
+          ${WORKOUT_TYPES.map(t=>`<button class="workout-type-btn" onclick="addWorkoutFromTemplate('${day}','${t}')">${t}</button>`).join('')}
+        </div>
+      </div>` : '';
+
     const workoutHtml = hasWorkout ? `
       <div class="sched-workout-card">
         <div class="workout-header">
-          <div class="workout-label">Workout // 60 min</div>
+          <div class="workout-label">Workout // ${escHtml(splitLabel[day]||d.tagLabel||'')}</div>
           <div style="display:flex;align-items:center;gap:8px">
-            <div class="workout-duration">${escHtml(splitLabel[day]||d.tagLabel||'')}</div>
             <button class="workout-card-del" onclick="deleteWorkout('${day}')">✕ Remove</button>
           </div>
         </div>
@@ -6088,12 +6555,10 @@ function renderSchedule() {
             onkeydown="if(event.key==='Enter')addWorkoutEx('${day}')">
           <button class="workout-add-btn" onclick="addWorkoutEx('${day}')">Add</button>
         </div>
-      </div>` : `
-      <div class="sched-workout-card sched-workout-add-card" id="wadd-area-${day}">
-        <div id="wadd-picker-${day}">
-          <button class="add-workout-btn" onclick="showAddWorkoutPickerWeek('${day}')">+ Add workout</button>
+        <div class="workout-complete-row">
+          <button class="workout-complete-btn" onclick="completeWorkout('${day}')">✓ Complete</button>
         </div>
-      </div>`;
+      </div>` : '';
 
     return `
       <div class="sched-day-section${isToday?' is-today':''}" id="sday-${day}">
@@ -6104,9 +6569,9 @@ function renderSchedule() {
             <span class="sday-tag ${d.tag}">${escHtml(d.tagLabel)}</span>
             ${isToday ? '<span class="sday-tag today-tag">Today</span>' : ''}
           </div>
-          ${getDayIllustration(day)}
+          ${hasWorkout ? getDayIllustration(day) : noWorkoutHeaderBtn}
         </div>
-        <div class="sched-day-body">
+        <div class="sched-day-body${hasWorkout?'':' no-workout'}">
           <div class="sched-routine-card">
             <div class="sched-card-label">Schedule // 7 AM – 11 PM</div>
             <div class="sched-blocks sched-timeline">${blocksHtml}</div>
