@@ -1012,6 +1012,21 @@
   }
   .sched-ampm-btn:hover { background: var(--ink); color: #F9F7F3; border-color: var(--ink); }
 
+  /* Spanning time-range blocks */
+  .sblock-span { align-items: flex-start; padding-top: 8px; flex-direction: column; gap: 4px; }
+  .sblock-span .sblock-drag { align-self: flex-start; }
+  .sblock-duration {
+    font-family: var(--mono); font-size: 8px; color: var(--ink3);
+    letter-spacing: 0.06em; display: block;
+  }
+  .sched-hour-cont {
+    height: 32px; padding-left: 8px;
+    border-left: 2px solid rgba(0,0,0,0.08);
+    background: rgba(0,0,0,0.01);
+    display: flex; align-items: center;
+  }
+  .sched-time-arrow { font-family: var(--mono); font-size: 9px; color: var(--ink3); padding: 0 3px; }
+
   /* Click-to-add inline slot */
   .sched-hour-empty { cursor: text; transition: background 0.1s; }
   .sched-hour-empty:hover { background: rgba(0,0,0,0.025); }
@@ -5791,34 +5806,61 @@ function renderSchedule() {
     const hasWorkout = Array.isArray(d.workout);
     const dayDate = getDayDate(day);
 
-    // Group blocks by hour for timeline
-    const byHour = {}, unplaced = [];
+    // Group blocks by hour for timeline, track spanned hours
+    const byHour = {}, spannedHours = new Set(), unplaced = [];
     d.blocks.forEach((b,bi) => {
       const mins = schedToMins(b.time);
       const hr = Math.floor(mins / 60);
-      if (mins < 9999 && hr >= 7 && hr <= 23) { (byHour[hr] = byHour[hr]||[]).push({b,bi}); }
-      else unplaced.push({b,bi});
+      if (mins < 9999 && hr >= 7 && hr <= 23) {
+        (byHour[hr] = byHour[hr]||[]).push({b,bi});
+        if (b.timeEnd) {
+          const endMins = schedToMins(b.timeEnd);
+          const endHr = Math.ceil(endMins / 60);
+          for (let sh = hr + 1; sh < endHr && sh <= 23; sh++) spannedHours.add(sh);
+        }
+      } else unplaced.push({b,bi});
     });
-    const mkBlock = (b,bi) => `
-      <div class="sblock ${b.type}" draggable="true"
+    const mkBlock = (b,bi) => {
+      let spanStyle = '', spanClass = '', durLabel = '';
+      if (b.timeEnd) {
+        const startM = schedToMins(b.time), endM = schedToMins(b.timeEnd);
+        if (endM > startM) {
+          const hrs = (endM - startM) / 60;
+          spanStyle = `min-height:${Math.max(hrs * 32 - 6, 32)}px;`;
+        }
+        spanClass = ' sblock-span';
+        durLabel = `<span class="sblock-duration">${escHtml(b.time)} – ${escHtml(b.timeEnd)}</span>`;
+      }
+      return `
+      <div class="sblock ${b.type}${spanClass}" draggable="true" style="${spanStyle}"
         ondragstart="schedDragStart(event,'${day}',${bi})"
         ondragend="document.querySelectorAll('.slot-drag-over').forEach(el=>el.classList.remove('slot-drag-over'))">
         <span class="sblock-drag">⠿</span>
+        ${durLabel}
         <span class="sblock-label" contenteditable="true"
           onblur="saveBlockEdit('${day}',${bi},'label',this.textContent.trim())"
           onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}"
         >${escHtml(b.label)}</span>
         <button class="sblock-del" onclick="deleteBlock('${day}',${bi})">✕</button>
       </div>`;
-    const timelineHtml = SCHED_HOURS.map(h => `
+    };
+    const timelineHtml = SCHED_HOURS.map(h => {
+      const items = (byHour[h]||[]).map(({b,bi})=>mkBlock(b,bi)).join('');
+      const slotContent = items
+        ? items
+        : spannedHours.has(h)
+          ? `<div class="sched-hour-cont"></div>`
+          : `<div class="sched-hour-empty" onclick="schedInlineAdd('${day}',${h})"></div>`;
+      return `
       <div class="sched-hour-row" id="shr-${day}-${h}"
         ondragover="schedSlotDragOver(event,'${day}',${h})"
         ondragleave="schedSlotDragLeave(event,'${day}',${h})"
         ondrop="schedSlotDrop(event,'${day}',${h})">
         <div class="sched-hour-label">${schedHrLabel(h)}</div>
         <div class="sched-hour-divider"></div>
-        <div class="sched-hour-items">${(byHour[h]||[]).map(({b,bi})=>mkBlock(b,bi)).join('')||`<div class="sched-hour-empty" onclick="schedInlineAdd('${day}',${h})"></div>`}</div>
-      </div>`).join('');
+        <div class="sched-hour-items">${slotContent}</div>
+      </div>`;
+    }).join('');
     const unplacedHtml = unplaced.length ? `<div class="sched-unplaced"><div class="sched-unplaced-label">Other</div>${unplaced.map(({b,bi})=>mkBlock(b,bi)).join('')}</div>` : '';
     const blocksHtml = timelineHtml + unplacedHtml;
 
@@ -5881,6 +5923,16 @@ function renderSchedule() {
                   <option value="45">45</option>
                 </select>
                 <button class="sched-ampm-btn" id="sadd-ampm-${day}" onclick="toggleAmPm('${day}')">AM</button>
+                <span class="sched-time-arrow">→</span>
+                <input class="sched-add-hour" id="sadd-ehour-${day}" type="number" min="1" max="12" placeholder="—">
+                <span class="sched-time-sep">:</span>
+                <select class="sched-add-min" id="sadd-emin-${day}">
+                  <option value="00">00</option>
+                  <option value="15">15</option>
+                  <option value="30">30</option>
+                  <option value="45">45</option>
+                </select>
+                <button class="sched-ampm-btn" id="sadd-eampm-${day}" onclick="toggleEndAmPm('${day}')">AM</button>
               </div>
               <input class="sched-add-label" id="sadd-label-${day}" placeholder="Add block..."
                 onkeydown="if(event.key==='Enter')addBlock('${day}')">
@@ -5916,6 +5968,9 @@ function addBlock(day){
   const h  = document.getElementById('sadd-hour-'+day);
   const m  = document.getElementById('sadd-min-'+day);
   const ap = document.getElementById('sadd-ampm-'+day);
+  const eh = document.getElementById('sadd-ehour-'+day);
+  const em = document.getElementById('sadd-emin-'+day);
+  const eap= document.getElementById('sadd-eampm-'+day);
   const l  = document.getElementById('sadd-label-'+day);
   if (!l || !l.value.trim()) return;
   const hr     = h && h.value ? parseInt(h.value) : 7;
@@ -5923,17 +5978,30 @@ function addBlock(day){
   const period = ap ? ap.textContent.trim() : 'AM';
   const timeStr = `${hr}:${mn} ${period}`;
   const newBlock = {type:'routine', time:timeStr, label:l.value.trim()};
+  // End time (optional — creates a spanning block)
+  if (eh && eh.value) {
+    const ehr = parseInt(eh.value);
+    const emn = em ? em.value : '00';
+    const eperiod = eap ? eap.textContent.trim() : 'AM';
+    newBlock.timeEnd = `${ehr}:${emn} ${eperiod}`;
+  }
   const blocks = scheduleData[day].blocks;
   const newMins = schedToMins(timeStr);
   let insertIdx = blocks.findIndex(b => schedToMins(b.time) > newMins);
   if (insertIdx === -1) insertIdx = blocks.length;
   blocks.splice(insertIdx, 0, newBlock);
   if (h) h.value = '';
+  if (eh) eh.value = '';
   l.value = '';
   saveSchedule(); saveCurrentWeek(); renderSchedule(); renderFocusSchedule(); renderDailyScheduleView();
 }
 function toggleAmPm(day){
   const btn = document.getElementById('sadd-ampm-'+day);
+  if (!btn) return;
+  btn.textContent = btn.textContent.trim() === 'AM' ? 'PM' : 'AM';
+}
+function toggleEndAmPm(day){
+  const btn = document.getElementById('sadd-eampm-'+day);
   if (!btn) return;
   btn.textContent = btn.textContent.trim() === 'AM' ? 'PM' : 'AM';
 }
@@ -5959,28 +6027,32 @@ function schedSlotDrop(e, day, h) {
   if (_schedDragDay !== day || _schedDragIdx === null) return;
   const blocks = scheduleData[day].blocks;
   const dragged = blocks[_schedDragIdx];
-  // Preserve original minutes
   const origMins = schedToMins(dragged.time);
   const origMin = origMins < 9999 ? origMins % 60 : 0;
   const period = h >= 12 ? 'PM' : 'AM';
   const dispH = h === 0 ? 12 : h > 12 ? h - 12 : h;
-  const newTime = `${dispH}:${String(origMin).padStart(2,'0')} ${period}`;
-  // Push items already in target hour +1 hour
-  blocks.forEach((b, bi) => {
-    if (bi === _schedDragIdx) return;
+  dragged.time = `${dispH}:${String(origMin).padStart(2,'0')} ${period}`;
+  // Cascade-push: displaced items find next empty slot
+  const draggedIdx = _schedDragIdx;
+  _schedDragIdx = null; _schedDragDay = null;
+  const usedHours = new Set();
+  // Sort by time, resolve conflicts
+  blocks.slice().sort((a,b) => schedToMins(a.time) - schedToMins(b.time)).forEach(b => {
     const bHr = Math.floor(schedToMins(b.time) / 60);
-    if (bHr === h) {
-      const bMin = schedToMins(b.time) % 60;
-      const newHr = h + 1;
-      if (newHr <= 23) {
-        const np = newHr >= 12 ? 'PM' : 'AM';
-        const ndH = newHr > 12 ? newHr - 12 : newHr;
+    if (usedHours.has(bHr)) {
+      let next = bHr + 1;
+      while (next <= 23 && usedHours.has(next)) next++;
+      if (next <= 23) {
+        const bMin = schedToMins(b.time) % 60;
+        const np = next >= 12 ? 'PM' : 'AM';
+        const ndH = next > 12 ? next - 12 : next;
         b.time = `${ndH}:${String(bMin).padStart(2,'0')} ${np}`;
+        usedHours.add(next);
       }
+    } else {
+      usedHours.add(bHr);
     }
   });
-  dragged.time = newTime;
-  _schedDragIdx = null; _schedDragDay = null;
   saveSchedule(); saveCurrentWeek(); renderSchedule(); renderFocusSchedule(); renderDailyScheduleView();
 }
 // Click empty slot to add inline
