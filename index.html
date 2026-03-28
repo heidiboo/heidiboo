@@ -1105,6 +1105,14 @@
         onkeydown="if(event.key==='Enter')requestAccess()">
     </div>
 
+    <!-- Password field — only shown for owner email -->
+    <div id="login-pw-wrap" style="display:none;flex-direction:column;gap:6px">
+      <input id="login-password" type="password" placeholder="Password"
+        style="padding:12px 16px;border:1px solid rgba(0,0,0,0.15);border-radius:8px;font-family:Inter,sans-serif;font-size:14px;background:#fff;color:#1A1A1A;outline:none;text-align:center;transition:border-color 0.15s"
+        onfocus="this.style.borderColor='#1A1A1A'" onblur="this.style.borderColor='rgba(0,0,0,0.15)'"
+        onkeydown="if(event.key==='Enter')requestAccess()">
+    </div>
+
     <!-- Submit button -->
     <button id="login-btn" onclick="requestAccess()"
       style="padding:12px;background:#1A1A1A;color:#F9F7F3;border:none;border-radius:8px;font-family:Inter,sans-serif;font-size:14px;font-weight:500;cursor:pointer">
@@ -2028,9 +2036,14 @@ const EMAILJS_KEY      = 'YOUR_PUBLIC_KEY';
 function onLoginEmailInput(val) {
   const email = val.trim().toLowerCase();
   const nameWrap = document.getElementById('login-name-wrap');
+  const pwWrap   = document.getElementById('login-pw-wrap');
+  const btn      = document.getElementById('login-btn');
+  const isOwner  = email === HEIDI_PRIMARY;
   // Show name field only for emails not in Heidi's list
   const needsName = email && !ALL_HEIDI.includes(email);
   nameWrap.style.display = needsName ? 'flex' : 'none';
+  pwWrap.style.display   = isOwner ? 'flex' : 'none';
+  btn.textContent        = isOwner ? 'Sign in' : 'Request access';
 }
 
 async function requestAccess() {
@@ -2040,6 +2053,26 @@ async function requestAccess() {
   const btn   = document.getElementById('login-btn');
 
   if (!email) { msg.textContent = 'Enter your email first'; return; }
+
+  // Owner: password login — no email needed
+  if (email === HEIDI_PRIMARY) {
+    const password = document.getElementById('login-password')?.value || '';
+    if (!password) {
+      msg.textContent = 'Enter your password';
+      document.getElementById('login-password').focus();
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = 'Signing in...';
+    msg.textContent = '';
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) {
+      msg.textContent = error.message;
+      btn.disabled = false;
+      btn.textContent = 'Sign in';
+    }
+    return;
+  }
 
   // Unknown email must provide their name
   if (!ALL_HEIDI.includes(email) && !name) {
