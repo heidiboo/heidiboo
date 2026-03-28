@@ -1012,6 +1012,59 @@
   }
   .sched-ampm-btn:hover { background: var(--ink); color: #F9F7F3; border-color: var(--ink); }
 
+  /* Sidebar section labels */
+  .sched-sb-section-label {
+    font-family: var(--mono); font-size: 7px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--ink3); padding: 12px 14px 4px;
+  }
+  .hist-month-item.routine-active {
+    background: rgba(0,0,0,0.06); font-weight: 600;
+  }
+  /* Workout card delete / add */
+  .workout-card-del {
+    background: none; border: none; color: var(--ink3); cursor: pointer;
+    font-size: 11px; padding: 2px 6px; opacity: 0; transition: opacity 0.15s;
+    border-radius: 4px;
+  }
+  .workout-header:hover .workout-card-del { opacity: 0.45; }
+  .workout-card-del:hover { opacity: 1 !important; color: #E74C3C; }
+  .add-workout-btn {
+    display: flex; align-items: center; gap: 6px; padding: 12px 14px;
+    font-size: 12px; color: var(--ink3); cursor: pointer; border: none;
+    background: none; width: 100%; font-family: var(--sans);
+    transition: background 0.1s; text-align: left;
+  }
+  .add-workout-btn:hover { background: rgba(0,0,0,0.02); color: var(--ink); }
+  .sched-workout-add-card {
+    display: flex; flex-direction: column; justify-content: center;
+    min-height: 60px;
+  }
+  .workout-type-picker { padding: 8px 14px 12px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .workout-type-btn {
+    padding: 4px 10px; border: 1px solid var(--border); border-radius: 12px;
+    font-size: 11px; background: transparent; cursor: pointer;
+    font-family: var(--sans); color: var(--ink2); transition: all 0.1s;
+  }
+  .workout-type-btn:hover { background: var(--ink); color: #F9F7F3; border-color: var(--ink); }
+  /* Routine workouts view */
+  .routine-workouts-wrap { padding: 24px 32px 48px; }
+  .routine-workout-day { margin-bottom: 32px; }
+  .routine-workout-day-header {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+    padding-bottom: 10px; border-bottom: 1px solid var(--border);
+  }
+  .routine-day-name {
+    font-family: var(--mono); font-size: 13px; font-weight: 700;
+    letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .routine-add-day-btn {
+    display: flex; align-items: center; gap: 6px; padding: 10px 14px;
+    font-size: 12px; color: var(--ink3); cursor: pointer;
+    border: 1px dashed var(--border); border-radius: 8px;
+    background: none; width: 100%; font-family: var(--sans); transition: all 0.1s;
+  }
+  .routine-add-day-btn:hover { border-color: var(--ink2); color: var(--ink); }
+
   /* Resize handles */
   .sblock-resize {
     position: absolute; left: 0; right: 0; height: 8px; z-index: 3;
@@ -1516,10 +1569,18 @@
       <div class="sidebar-layout" id="schedule-layout">
         <div class="history-sidebar" id="schedule-sidebar">
           <div class="history-sidebar-header">
-            <span class="hist-label">History</span>
-            <button class="sidebar-toggle-btn" onclick="toggleSidebar('schedule')" title="Toggle history">☰</button>
+            <span class="hist-label">Schedule</span>
+            <button class="sidebar-toggle-btn" onclick="toggleSidebar('schedule')" title="Toggle sidebar">☰</button>
           </div>
           <div class="sidebar-inner" id="schedule-sidebar-inner">
+            <div class="sched-sb-section-label">Routine</div>
+            <div class="hist-month-item" id="routine-weekly-item" onclick="showRoutineView('weekly')">
+              <span class="hist-month-name">Weekly Schedule</span>
+            </div>
+            <div class="hist-month-item" id="routine-workouts-item" onclick="showRoutineView('workouts')">
+              <span class="hist-month-name">Workouts</span>
+            </div>
+            <div class="sched-sb-section-label" style="margin-top:8px">History</div>
             <div id="schedule-sidebar-months"></div>
           </div>
         </div>
@@ -1527,13 +1588,12 @@
           <div id="sched-normal-header" class="section-header" style="padding-bottom:16px">
             <div class="section-title" id="schedule-week-title">This week</div>
             <div style="display:flex;gap:8px">
-              <button class="btn" onclick="editBaseline()" style="font-size:11px;padding:5px 12px;border:1px solid var(--border);background:transparent;color:var(--ink2)">✎ Edit baseline</button>
               <button class="btn" onclick="copyBaselineToWeek(currentScheduleWeek)" style="font-size:11px;padding:5px 12px;border:1px solid var(--border);background:transparent;color:var(--ink2)">↺ Reset to baseline</button>
             </div>
           </div>
           <div id="sched-baseline-banner" style="display:none;align-items:center;justify-content:space-between;padding:10px 16px;margin-bottom:16px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px">
-            <span style="font-size:12px;color:#92400E;font-family:var(--mono)">✎ Editing baseline template — changes save automatically</span>
-            <button onclick="exitBaseline()" style="font-size:11px;padding:4px 10px;background:#1A1A1A;color:#F9F7F3;border:none;border-radius:5px;cursor:pointer;font-family:var(--sans)">Done</button>
+            <span id="sched-baseline-banner-text" style="font-size:12px;color:#92400E;font-family:var(--mono)">✎ Editing baseline template — changes save automatically</span>
+            <button onclick="exitRoutineView()" style="font-size:11px;padding:4px 10px;background:#1A1A1A;color:#F9F7F3;border:none;border-radius:5px;cursor:pointer;font-family:var(--sans)">← Back</button>
           </div>
           <div class="schedule-wrap" id="schedule-wrap"></div>
         </div>
@@ -5317,11 +5377,125 @@ function editBaseline() {
 
 function exitBaseline() {
   _editingBaseline = false;
-  // Restore current week data
   scheduleData = JSON.parse(JSON.stringify(scheduleHistory[currentScheduleWeek] || getBaseline()));
   document.getElementById('sched-normal-header').style.display = 'flex';
   document.getElementById('sched-baseline-banner').style.display = 'none';
   renderSchedule();
+}
+function exitRoutineView() {
+  _schedMode = 'week';
+  document.querySelectorAll('#routine-weekly-item,#routine-workouts-item').forEach(el=>el.classList.remove('routine-active'));
+  exitBaseline();
+}
+const WORKOUT_TYPES = ['Push','Pull','Legs','Cardio','Upper','Lower','Full Body','Custom'];
+let _schedMode = 'week';
+
+function showRoutineView(view) {
+  _schedMode = 'routine-' + view;
+  document.querySelectorAll('#routine-weekly-item,#routine-workouts-item').forEach(el=>el.classList.remove('routine-active'));
+  const activeEl = document.getElementById('routine-'+view+'-item');
+  if (activeEl) activeEl.classList.add('routine-active');
+  scheduleData = JSON.parse(JSON.stringify(getBaseline()));
+  _editingBaseline = true;
+  document.getElementById('sched-normal-header').style.display = 'none';
+  document.getElementById('sched-baseline-banner').style.display = 'flex';
+  const bannerText = document.getElementById('sched-baseline-banner-text');
+  if (bannerText) bannerText.textContent = view === 'weekly'
+    ? '✎ Weekly Schedule — edits save as your baseline template'
+    : '✎ Workouts — edits save as your baseline template';
+  if (view === 'weekly') renderSchedule();
+  else renderRoutineWorkouts();
+}
+
+function renderRoutineWorkouts() {
+  const wrap = document.getElementById('schedule-wrap');
+  if (!wrap) return;
+  wrap.innerHTML = `<div class="routine-workouts-wrap">${DAY_ORDER.map(day => {
+    const d = scheduleData[day];
+    const hasW = Array.isArray(d.workout);
+    const exRows = hasW ? d.workout.map((ex,ei) => `
+      <div class="workout-ex" draggable="true"
+        ondragstart="wexDragStart(event,'${day}',${ei})"
+        ondragover="wexItemDragOver(event,this)"
+        ondragleave="this.classList.remove('wex-drag-over')"
+        ondrop="wexItemDrop(event,'${day}',${ei})">
+        <span class="workout-ex-drag-handle">⠿</span>
+        <input class="workout-ex-name" value="${escHtml(ex.name)}" placeholder="Exercise"
+          onchange="saveWorkoutEdit('${day}',${ei},'name',this.value);saveSchedule()">
+        <input class="workout-ex-sets" value="${escHtml(ex.sets)}" placeholder="Sets × reps"
+          onchange="saveWorkoutEdit('${day}',${ei},'sets',this.value);saveSchedule()">
+        <button class="workout-ex-del" onclick="deleteWorkoutEx('${day}',${ei});renderRoutineWorkouts()">✕</button>
+      </div>`).join('') : '';
+    return `
+    <div class="routine-workout-day">
+      <div class="routine-workout-day-header">
+        <span class="routine-day-name">${day}</span>
+        <span class="sday-tag ${d.tag}">${escHtml(d.tagLabel)}</span>
+        <div style="flex:1"></div>
+        ${hasW ? `<button onclick="deleteWorkout('${day}')" style="background:none;border:none;color:var(--ink3);cursor:pointer;font-size:11px;padding:3px 8px;border-radius:4px;transition:color 0.15s" onmouseover="this.style.color='#E74C3C'" onmouseout="this.style.color='var(--ink3)'">✕ Remove workout</button>` : ''}
+      </div>
+      ${hasW ? `
+      <div class="sched-workout-card">
+        <div class="workout-header">
+          <div class="workout-label">Workout // ${escHtml(d.tagLabel||'')}</div>
+        </div>
+        <div class="workout-exercises">${exRows}</div>
+        <div class="workout-add-row">
+          <input class="workout-add-name" id="rwadd-name-${day}" placeholder="Add exercise..."
+            onkeydown="if(event.key==='Enter')addRoutineWorkoutEx('${day}')">
+          <input class="workout-add-sets" id="rwadd-sets-${day}" placeholder="3 × 10"
+            onkeydown="if(event.key==='Enter')addRoutineWorkoutEx('${day}')">
+          <button class="workout-add-btn" onclick="addRoutineWorkoutEx('${day}')">Add</button>
+        </div>
+      </div>` : `
+      <div id="rwday-picker-${day}">
+        <button class="routine-add-day-btn" onclick="showAddWorkoutPicker('${day}')">+ Add workout</button>
+      </div>`}
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function deleteWorkout(day) {
+  scheduleData[day].workout = null;
+  saveSchedule(); saveCurrentWeek();
+  if (_schedMode === 'routine-workouts') renderRoutineWorkouts();
+  else renderSchedule();
+}
+
+function showAddWorkoutPicker(day) {
+  const el = document.getElementById('rwday-picker-'+day);
+  if (!el) return;
+  el.innerHTML = `<div class="workout-type-picker">${WORKOUT_TYPES.map(t =>
+    `<button class="workout-type-btn" onclick="addWorkout('${day}','${t}')">${t}</button>`
+  ).join('')}<button class="workout-type-btn" onclick="document.getElementById('rwday-picker-${day}').innerHTML='<button class=\\'routine-add-day-btn\\' onclick=\\'showAddWorkoutPicker(\\'${day}\\')\\'>+ Add workout</button>'">Cancel</button></div>`;
+}
+
+function showAddWorkoutPickerWeek(day) {
+  const el = document.getElementById('wadd-picker-'+day);
+  if (!el) return;
+  el.innerHTML = `<div class="workout-type-picker">${WORKOUT_TYPES.map(t =>
+    `<button class="workout-type-btn" onclick="addWorkout('${day}','${t}')">${t}</button>`
+  ).join('')}</div>`;
+}
+
+function addWorkout(day, type) {
+  scheduleData[day].workout = [];
+  scheduleData[day].tagLabel = type;
+  const tagMap = {'Push':'gym','Pull':'gym','Legs':'gym','Cardio':'gym','Upper':'gym','Lower':'gym','Full Body':'gym','Custom':'gym'};
+  scheduleData[day].tag = tagMap[type] || 'gym';
+  saveSchedule(); saveCurrentWeek();
+  if (_schedMode === 'routine-workouts') renderRoutineWorkouts();
+  else renderSchedule();
+}
+
+function addRoutineWorkoutEx(day) {
+  const n = document.getElementById('rwadd-name-'+day);
+  const s = document.getElementById('rwadd-sets-'+day);
+  if (!n || !n.value.trim()) return;
+  if (!Array.isArray(scheduleData[day].workout)) scheduleData[day].workout = [];
+  scheduleData[day].workout.push({name:n.value.trim(), sets:s?.value.trim()||''});
+  n.value=''; if(s) s.value='';
+  saveSchedule(); saveCurrentWeek(); renderRoutineWorkouts();
 }
 
 // ---- POMODORO ----
@@ -5884,7 +6058,10 @@ function renderSchedule() {
       <div class="sched-workout-card">
         <div class="workout-header">
           <div class="workout-label">Workout // 60 min</div>
-          <div class="workout-duration">${escHtml(splitLabel[day]||'')}</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="workout-duration">${escHtml(splitLabel[day]||d.tagLabel||'')}</div>
+            <button class="workout-card-del" onclick="deleteWorkout('${day}')">✕ Remove</button>
+          </div>
         </div>
         <div class="workout-exercises"
           ondragover="wexCardDragOver(event)"
@@ -5911,7 +6088,12 @@ function renderSchedule() {
             onkeydown="if(event.key==='Enter')addWorkoutEx('${day}')">
           <button class="workout-add-btn" onclick="addWorkoutEx('${day}')">Add</button>
         </div>
-      </div>` : '';
+      </div>` : `
+      <div class="sched-workout-card sched-workout-add-card" id="wadd-area-${day}">
+        <div id="wadd-picker-${day}">
+          <button class="add-workout-btn" onclick="showAddWorkoutPickerWeek('${day}')">+ Add workout</button>
+        </div>
+      </div>`;
 
     return `
       <div class="sched-day-section${isToday?' is-today':''}" id="sday-${day}">
@@ -5924,7 +6106,7 @@ function renderSchedule() {
           </div>
           ${getDayIllustration(day)}
         </div>
-        <div class="sched-day-body${!hasWorkout?' no-workout':''}">
+        <div class="sched-day-body">
           <div class="sched-routine-card">
             <div class="sched-card-label">Schedule // 7 AM – 11 PM</div>
             <div class="sched-blocks sched-timeline">${blocksHtml}</div>
