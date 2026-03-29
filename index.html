@@ -1676,6 +1676,36 @@
         <div class="reminders-grid" id="reminders-grid"></div>
       </div>
     </div>
+    <!-- LINK EDITOR MODAL -->
+    <div id="proj-link-modal" style="display:none;position:fixed;inset:0;z-index:8600;background:rgba(0,0,0,0.25);backdrop-filter:blur(4px);align-items:center;justify-content:center" onclick="if(event.target===this)closeProjLinkModal()">
+      <div style="background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);width:420px;box-shadow:0 8px 40px rgba(0,0,0,0.15);overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)">
+          <span id="proj-link-modal-title" style="font-size:13px;font-weight:600">Add Link</span>
+          <button onclick="closeProjLinkModal()" style="background:none;border:none;cursor:pointer;font-size:18px;color:var(--ink2);line-height:1">×</button>
+        </div>
+        <div style="padding:20px;display:flex;flex-direction:column;gap:14px">
+          <div id="proj-link-label-row" style="display:flex;flex-direction:column;gap:5px">
+            <label style="font-size:11px;color:var(--ink2);font-family:var(--mono);letter-spacing:0.06em;text-transform:uppercase">Label</label>
+            <input id="proj-link-label-input" type="text" placeholder="e.g. Figma, Notion, PRD…" oninput="autoFillLinkIcon(this.value)"
+              style="padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--sans);font-size:13px;background:var(--bg);color:var(--ink);outline:none;width:100%;box-sizing:border-box">
+          </div>
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <label style="font-size:11px;color:var(--ink2);font-family:var(--mono);letter-spacing:0.06em;text-transform:uppercase">URL</label>
+            <input id="proj-link-url-input" type="url" placeholder="https://" onkeydown="if(event.key==='Enter')saveProjLinkModal()"
+              style="padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--sans);font-size:13px;background:var(--bg);color:var(--ink);outline:none;width:100%;box-sizing:border-box">
+          </div>
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <label style="font-size:11px;color:var(--ink2);font-family:var(--mono);letter-spacing:0.06em;text-transform:uppercase">Icon</label>
+            <input id="proj-link-icon-input" type="text" placeholder="🔗" maxlength="4"
+              style="padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--sans);font-size:18px;background:var(--bg);color:var(--ink);outline:none;width:72px;box-sizing:border-box;text-align:center">
+          </div>
+        </div>
+        <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">
+          <button onclick="closeProjLinkModal()" style="padding:7px 16px;border:1px solid var(--border);border-radius:var(--radius-sm);background:transparent;cursor:pointer;font-family:var(--sans);font-size:13px;color:var(--ink2)">Cancel</button>
+          <button onclick="saveProjLinkModal()" class="btn btn-primary" style="padding:7px 16px;font-size:13px">Save</button>
+        </div>
+      </div>
+    </div>
     <!-- DOCS PICKER MODAL -->
     <div id="proj-docs-picker" class="proj-docs-picker-modal" style="display:none" onclick="if(event.target===this)closeProjectDocsPicker()">
       <div class="proj-docs-picker-box">
@@ -6021,30 +6051,62 @@ function renderProjectDetail() {
   `;
 }
 
-function editProjLink(pi, li) {
+const LINK_ICONS = { figma:'🎨', notion:'📝', slack:'💬', drive:'📁', github:'🐙', confluence:'📘', linear:'🔷', loom:'🎥', miro:'🟡', jira:'📋', prd:'📄', docs:'📄', sheets:'📊', meet:'🎥', zoom:'🎥', asana:'📌', trello:'📌' };
+let _linkModalPi = -1, _linkModalLi = -1;
+
+function openProjLinkModal(pi, li, isEdit) {
+  _linkModalPi = pi; _linkModalLi = li;
+  const modal = document.getElementById('proj-link-modal');
+  document.getElementById('proj-link-modal-title').textContent = isEdit ? 'Edit Link' : 'Add Link';
   const p = projects[pi];
-  if (!p) return;
-  const l = p.links[li];
-  const url = prompt(`URL for ${l.label}:`, l.url || '');
-  if (url === null) return; // cancelled
-  l.url = url.trim();
+  const l = isEdit ? p.links[li] : { label:'', url:'', icon:'🔗' };
+  document.getElementById('proj-link-label-input').value = l.label || '';
+  document.getElementById('proj-link-url-input').value = l.url || '';
+  document.getElementById('proj-link-icon-input').value = l.icon || '🔗';
+  const labelRow = document.getElementById('proj-link-label-row');
+  // Hide label field when editing a fixed slot (Figma/Jira/PRD)
+  labelRow.style.display = (isEdit && li < DEFAULT_PROJ_LINKS.length) ? 'none' : 'flex';
+  modal.style.display = 'flex';
+  setTimeout(() => {
+    const first = isEdit ? document.getElementById('proj-link-url-input') : document.getElementById('proj-link-label-input');
+    first.focus(); first.select();
+  }, 50);
+}
+
+function closeProjLinkModal() {
+  document.getElementById('proj-link-modal').style.display = 'none';
+  _linkModalPi = -1; _linkModalLi = -1;
+}
+
+function saveProjLinkModal() {
+  const pi = _linkModalPi, li = _linkModalLi;
+  const p = projects[pi]; if (!p) return;
+  const url   = document.getElementById('proj-link-url-input').value.trim();
+  const label = document.getElementById('proj-link-label-input').value.trim();
+  const icon  = document.getElementById('proj-link-icon-input').value.trim() || '🔗';
+  if (li >= 0 && li < p.links.length) {
+    // editing existing
+    p.links[li].url = url;
+    if (label) p.links[li].label = label;
+    p.links[li].icon = icon;
+  } else {
+    // adding new
+    if (!label) return;
+    p.links.push({ label, icon, url });
+  }
   save('projects', projects);
+  closeProjLinkModal();
   renderProjectDetail();
 }
 
-function addProjLink(pi) {
-  const p = projects[pi];
-  if (!p) return;
-  const label = prompt('Link label (e.g. Notion, Slack, Drive):');
-  if (!label?.trim()) return;
-  const url = prompt(`URL for ${label.trim()}:`, 'https://');
-  if (!url?.trim()) return;
-  const icons = { notion:'📝', slack:'💬', drive:'📁', github:'🐙', confluence:'📘', linear:'🔷', loom:'🎥', miro:'🟡' };
-  const icon = icons[label.toLowerCase()] || '🔗';
-  p.links.push({ label: label.trim(), icon, url: url.trim() });
-  save('projects', projects);
-  renderProjectDetail();
+function autoFillLinkIcon(val) {
+  const key = val.toLowerCase().replace(/[^a-z]/g,'');
+  const icon = LINK_ICONS[key] || '🔗';
+  document.getElementById('proj-link-icon-input').value = icon;
 }
+
+function editProjLink(pi, li) { openProjLinkModal(pi, li, true); }
+function addProjLink(pi)       { openProjLinkModal(pi, -1, false); }
 
 function removeProjLink(pi, li) {
   const p = projects[pi];
