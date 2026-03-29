@@ -1674,16 +1674,20 @@
             <span class="hist-label">Schedule</span>
             <button class="sidebar-toggle-btn" onclick="toggleSidebar('schedule')" title="Toggle sidebar">☰</button>
           </div>
-          <div class="sidebar-inner" id="schedule-sidebar-inner">
-            <div class="sched-sb-section-label">Routine</div>
-            <div class="hist-month-item" id="routine-weekly-item" onclick="showRoutineView('weekly')">
-              <span class="hist-month-name">Weekly Schedule</span>
+          <div class="sidebar-inner" id="schedule-sidebar-inner" style="display:flex;flex-direction:column;height:100%;overflow:hidden">
+            <div style="flex:1;overflow-y:auto;min-height:0">
+              <div class="sched-sb-section-label">History</div>
+              <div id="schedule-sidebar-months"></div>
             </div>
-            <div class="hist-month-item" id="routine-workouts-item" onclick="showRoutineView('workouts')">
-              <span class="hist-month-name">Workouts</span>
+            <div style="flex-shrink:0;border-top:1px solid var(--border);padding-top:8px;margin-top:8px">
+              <div class="sched-sb-section-label">Routine</div>
+              <div class="hist-month-item" id="routine-weekly-item" onclick="showRoutineView('weekly')">
+                <span class="hist-month-name">Weekly Schedule</span>
+              </div>
+              <div class="hist-month-item" id="routine-workouts-item" onclick="showRoutineView('workouts')">
+                <span class="hist-month-name">Workouts</span>
+              </div>
             </div>
-            <div class="sched-sb-section-label" style="margin-top:8px">History</div>
-            <div id="schedule-sidebar-months"></div>
           </div>
         </div>
         <div class="sidebar-main">
@@ -6834,7 +6838,11 @@ function renderSchedule() {
   if (!wrap) return;
   renderScheduleSidebar();
   const todayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
-  const orderedDays = DAY_ORDER; // always Sun → Sat
+  const todayPos = DAY_ORDER.indexOf(todayName);
+  // Today at top, then future days, then past days wrap to bottom
+  const orderedDays = todayPos >= 0
+    ? [...DAY_ORDER.slice(todayPos), ...DAY_ORDER.slice(0, todayPos)]
+    : DAY_ORDER;
   const splitLabel = {Monday:'Push',Wednesday:'Cardio',Thursday:'Pull',Saturday:'Legs',Sunday:'Upper'};
 
   // Calculate the date for each day of the current week (Sunday-based)
