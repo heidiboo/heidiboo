@@ -2631,6 +2631,15 @@ function loadAll() {
   const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
   trashedDocs = trashedDocs.filter(d => d.trashedAt > cutoff);
   save('trashedDocs', trashedDocs);
+  // Stamp any doc missing updatedTs so sort order is stable
+  let docsNeedSave = false;
+  docs.forEach((d, i) => {
+    if (!d.updatedTs) {
+      d.updatedTs = new Date(d.updatedAt || d.createdAt || 0).getTime() || (i * 1000);
+      docsNeedSave = true;
+    }
+  });
+  if (docsNeedSave) save('docs', docs);
   rolloverTasks();
 }
 
@@ -3566,8 +3575,8 @@ function renderDocs(filterProject) {
         <button class="doc-card-action-btn lock-btn" onclick="toggleDocLock('${d.id}')" title="${isLocked?'Unlock':'Lock'}">${isLocked?'🔓 Unlock':'🔒 Lock'}</button>
         <button class="doc-card-action-btn trash" onclick="trashDoc('${d.id}')" title="Move to trash">🗑</button>
       </div>
-      <div class="doc-card-title">${isLocked ? '••••••••' : (d.title || 'Untitled')}</div>
-      <div class="doc-card-preview">${isLocked ? '<span style="filter:blur(4px)">Locked content hidden</span>' : (summary || '<span style="color:var(--border)">No content yet</span>')}</div>
+      <div class="doc-card-title">${d.title || 'Untitled'}</div>
+      <div class="doc-card-preview">${isLocked ? '<span style="filter:blur(5px);user-select:none">••••••••••••••••••••••••••••••••••••••</span>' : (summary || '<span style="color:var(--border)">No content yet</span>')}</div>
       <div class="doc-card-meta">
         <span>${d.createdAt || ''}${d.updatedAt && d.updatedAt !== d.createdAt ? ' · edited ' + d.updatedAt : ''}</span>
         ${d.folder ? `<span class="doc-card-project">${(docFolders.find(f=>f.id===d.folder)||{}).name||''}</span>` : d.project ? `<span class="doc-card-project">${d.project}</span>` : ''}
