@@ -1515,7 +1515,7 @@
       <nav class="nav">
         <button class="nav-btn active" onclick="showTab('overview',this)">Overview</button>
         <button class="nav-btn" onclick="showTab('tasks',this)">Tasks</button>
-        <button class="nav-btn" onclick="showTab('projects',this)">Projects</button>
+        <button class="nav-btn" onclick="showTab('projects',this)" ondblclick="closeProject()">Projects</button>
         <button class="nav-btn" onclick="showTab('docs',this)">Docs</button>
         <button class="nav-btn" onclick="showTab('schedule',this)">Schedule</button>
       </nav>
@@ -1678,34 +1678,22 @@
         <div class="reminders-grid" id="reminders-grid"></div>
       </div>
     </div>
-    <!-- LINK EDITOR MODAL -->
-    <div id="proj-link-modal" style="display:none;position:fixed;inset:0;z-index:8600;background:rgba(0,0,0,0.25);backdrop-filter:blur(4px);align-items:center;justify-content:center" onclick="if(event.target===this)closeProjLinkModal()">
-      <div style="background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);width:420px;box-shadow:0 8px 40px rgba(0,0,0,0.15);overflow:hidden">
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)">
-          <span id="proj-link-modal-title" style="font-size:13px;font-weight:600">Add Link</span>
-          <button onclick="closeProjLinkModal()" style="background:none;border:none;cursor:pointer;font-size:18px;color:var(--ink2);line-height:1">×</button>
-        </div>
-        <div style="padding:20px;display:flex;flex-direction:column;gap:14px">
-          <div id="proj-link-label-row" style="display:flex;flex-direction:column;gap:5px">
-            <label style="font-size:11px;color:var(--ink2);font-family:var(--mono);letter-spacing:0.06em;text-transform:uppercase">Label</label>
-            <input id="proj-link-label-input" type="text" placeholder="e.g. Figma, Notion, PRD…" oninput="autoFillLinkIcon(this.value)"
-              style="padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--sans);font-size:13px;background:var(--bg);color:var(--ink);outline:none;width:100%;box-sizing:border-box">
-          </div>
-          <div style="display:flex;flex-direction:column;gap:5px">
-            <label style="font-size:11px;color:var(--ink2);font-family:var(--mono);letter-spacing:0.06em;text-transform:uppercase">URL</label>
-            <input id="proj-link-url-input" type="url" placeholder="https://" onkeydown="if(event.key==='Enter')saveProjLinkModal()"
-              style="padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--sans);font-size:13px;background:var(--bg);color:var(--ink);outline:none;width:100%;box-sizing:border-box">
-          </div>
-          <div style="display:flex;flex-direction:column;gap:5px">
-            <label style="font-size:11px;color:var(--ink2);font-family:var(--mono);letter-spacing:0.06em;text-transform:uppercase">Icon</label>
-            <input id="proj-link-icon-input" type="text" placeholder="🔗" maxlength="4"
-              style="padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--sans);font-size:18px;background:var(--bg);color:var(--ink);outline:none;width:72px;box-sizing:border-box;text-align:center">
-          </div>
-        </div>
-        <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">
-          <button onclick="closeProjLinkModal()" style="padding:7px 16px;border:1px solid var(--border);border-radius:var(--radius-sm);background:transparent;cursor:pointer;font-family:var(--sans);font-size:13px;color:var(--ink2)">Cancel</button>
-          <button onclick="saveProjLinkModal()" class="btn btn-primary" style="padding:7px 16px;font-size:13px">Save</button>
-        </div>
+    <!-- LINK EDITOR POPOVER -->
+    <div id="proj-link-modal" style="display:none;position:fixed;z-index:9000;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 6px 24px rgba(0,0,0,0.14);padding:16px;width:260px">
+      <div id="proj-link-label-row" style="margin-bottom:10px">
+        <div style="font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink2);margin-bottom:4px;font-family:var(--mono)">Label</div>
+        <input id="proj-link-label-input" type="text" placeholder="e.g. Notion, PRD…" oninput="autoFillLinkIcon(this.value)"
+          style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:var(--sans);background:var(--bg);color:var(--ink);outline:none;box-sizing:border-box">
+      </div>
+      <div style="margin-bottom:12px">
+        <div style="font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink2);margin-bottom:4px;font-family:var(--mono)">URL</div>
+        <input id="proj-link-url-input" type="url" placeholder="https://"
+          onkeydown="if(event.key==='Enter')saveProjLinkModal();if(event.key==='Escape')closeProjLinkModal()"
+          style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:var(--sans);background:var(--bg);color:var(--ink);outline:none;box-sizing:border-box">
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:6px">
+        <button onclick="closeProjLinkModal()" style="padding:5px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:transparent;cursor:pointer;font-size:12px;color:var(--ink2);font-family:var(--sans)">Cancel</button>
+        <button onclick="saveProjLinkModal()" class="btn btn-primary" style="padding:5px 12px;font-size:12px">Save</button>
       </div>
     </div>
     <!-- DOCS PICKER MODAL -->
@@ -6019,37 +6007,29 @@ function renderProjectDetail() {
           <span class="badge ${sc}">${p.status}</span>
           <span class="badge ${zc}">${p.size || 'Small'}</span>
           <span style="font-size:11px;color:var(--ink2);background:rgba(0,0,0,0.05);padding:2px 9px;border-radius:20px">${p.phase}</span>
-          ${p.due ? `<span style="font-size:11px;color:var(--ink2)">Due ${p.due}</span>` : ''}
-        </div>
-      </div>
-      <div style="min-width:200px">
-        <div style="font-size:11px;color:var(--ink2);margin-bottom:8px;font-family:var(--mono);letter-spacing:0.05em">PROGRESS</div>
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-          <div class="progress-bar" style="flex:1;margin:0"><div class="progress-fill" style="width:${p.progress}%"></div></div>
-          <input type="number" min="0" max="100" value="${p.progress}"
-            onchange="updateProject(${i},'progress',Math.min(100,Math.max(0,+this.value)));renderProjectDetail()"
-            style="width:48px;padding:3px 6px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:var(--sans);background:var(--bg);color:var(--ink);outline:none;text-align:center">
-          <span style="font-size:12px;color:var(--ink2)">%</span>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:6px">
-          <div style="display:flex;align-items:center;gap:8px">
-            <span style="font-size:11px;color:var(--ink3);width:32px">Start</span>
-            <input type="date" value="${p.startDate||''}"
-              onchange="updateProject(${i},'startDate',this.value);renderProjectDetail()"
-              style="flex:1;padding:3px 6px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:var(--sans);background:var(--bg);color:var(--ink);outline:none">
-          </div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <span style="font-size:11px;color:var(--ink3);width:32px">Due</span>
-            <input type="date" value="${p.due||''}"
-              onchange="updateProject(${i},'due',this.value);renderProjectDetail()"
-              style="flex:1;padding:3px 6px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:var(--sans);background:var(--bg);color:var(--ink);outline:none">
-          </div>
+          <span style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--ink3)">Start
+            <input type="date" value="${p.startDate||''}" onchange="updateProject(${i},'startDate',this.value)"
+              style="border:none;background:transparent;outline:none;font-size:11px;color:var(--ink2);font-family:var(--sans);cursor:pointer;padding:0;width:${p.startDate ? '90px' : '20px'}">
+          </span>
+          <span style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--ink3)">Due
+            <input type="date" value="${p.due||''}" onchange="updateProject(${i},'due',this.value);renderProjectDetail()"
+              style="border:none;background:transparent;outline:none;font-size:11px;color:var(--ink2);font-family:var(--sans);cursor:pointer;padding:0;width:${p.due ? '90px' : '20px'}">
+          </span>
           ${p.due ? (() => {
             const days = Math.ceil((new Date(p.due + 'T12:00:00') - new Date()) / 86400000);
             const color = days < 0 ? 'var(--accent)' : days <= 7 ? '#B45309' : 'var(--ink2)';
             const label = days < 0 ? `${Math.abs(days)}d overdue` : days === 0 ? 'Due today' : `${days}d left`;
-            return `<div style="font-size:11px;font-weight:600;color:${color};text-align:right;margin-top:2px">${label}</div>`;
+            return `<span style="font-size:11px;font-weight:600;color:${color}">${label}</span>`;
           })() : ''}
+        </div>
+      </div>
+      <div style="min-width:180px">
+        <div style="font-size:10px;color:var(--ink2);margin-bottom:8px;font-family:var(--mono);letter-spacing:0.07em;text-transform:uppercase">Progress</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <input type="range" min="0" max="100" value="${p.progress}"
+            oninput="this.nextElementSibling.textContent=this.value+'%';updateProject(${i},'progress',+this.value)"
+            style="flex:1;cursor:pointer;accent-color:var(--ink);height:4px">
+          <span style="font-size:12px;color:var(--ink2);min-width:34px;text-align:right">${p.progress}%</span>
         </div>
       </div>
     </div>
@@ -6080,24 +6060,36 @@ function renderProjectDetail() {
 
 const LINK_ICONS = { figma:'🎨', notion:'📝', slack:'💬', drive:'📁', github:'🐙', confluence:'📘', linear:'🔷', loom:'🎥', miro:'🟡', jira:'📋', prd:'📄', docs:'📄', sheets:'📊', meet:'🎥', zoom:'🎥', asana:'📌', trello:'📌' };
 let _linkModalPi = -1, _linkModalLi = -1;
+let _linkIconDerived = '🔗';
 
 function openProjLinkModal(pi, li, isEdit) {
   _linkModalPi = pi; _linkModalLi = li;
-  const modal = document.getElementById('proj-link-modal');
-  document.getElementById('proj-link-modal-title').textContent = isEdit ? 'Edit Link' : 'Add Link';
+  const pop = document.getElementById('proj-link-modal');
   const p = projects[pi];
   const l = isEdit ? p.links[li] : { label:'', url:'', icon:'🔗' };
   document.getElementById('proj-link-label-input').value = l.label || '';
   document.getElementById('proj-link-url-input').value = l.url || '';
-  document.getElementById('proj-link-icon-input').value = l.icon || '🔗';
+  _linkIconDerived = l.icon || '🔗';
   const labelRow = document.getElementById('proj-link-label-row');
-  // Hide label field when editing a fixed slot (Figma/Jira/PRD)
-  labelRow.style.display = (isEdit && li < DEFAULT_PROJ_LINKS.length) ? 'none' : 'flex';
-  modal.style.display = 'flex';
+  // Hide label for fixed slots (Figma/Jira/PRD)
+  labelRow.style.display = (isEdit && li < DEFAULT_PROJ_LINKS.length) ? 'none' : 'block';
+  // Position below the chip that was clicked
+  const chip = event?.target?.closest('.proj-link-chip') || event?.currentTarget;
+  if (chip) {
+    const rect = chip.getBoundingClientRect();
+    const popW = 260;
+    let left = rect.left;
+    if (left + popW > window.innerWidth - 12) left = window.innerWidth - popW - 12;
+    pop.style.top  = (rect.bottom + 6) + 'px';
+    pop.style.left = left + 'px';
+  }
+  pop.style.display = 'block';
   setTimeout(() => {
-    const first = isEdit ? document.getElementById('proj-link-url-input') : document.getElementById('proj-link-label-input');
+    const first = (isEdit && li < DEFAULT_PROJ_LINKS.length)
+      ? document.getElementById('proj-link-url-input')
+      : document.getElementById('proj-link-label-input');
     first.focus(); first.select();
-  }, 50);
+  }, 30);
 }
 
 function closeProjLinkModal() {
@@ -6110,14 +6102,12 @@ function saveProjLinkModal() {
   const p = projects[pi]; if (!p) return;
   const url   = document.getElementById('proj-link-url-input').value.trim();
   const label = document.getElementById('proj-link-label-input').value.trim();
-  const icon  = document.getElementById('proj-link-icon-input').value.trim() || '🔗';
+  const icon  = _linkIconDerived || '🔗';
   if (li >= 0 && li < p.links.length) {
-    // editing existing
     p.links[li].url = url;
     if (label) p.links[li].label = label;
     p.links[li].icon = icon;
   } else {
-    // adding new
     if (!label) return;
     p.links.push({ label, icon, url });
   }
@@ -6128,9 +6118,16 @@ function saveProjLinkModal() {
 
 function autoFillLinkIcon(val) {
   const key = val.toLowerCase().replace(/[^a-z]/g,'');
-  const icon = LINK_ICONS[key] || '🔗';
-  document.getElementById('proj-link-icon-input').value = icon;
+  _linkIconDerived = LINK_ICONS[key] || '🔗';
 }
+
+// Close popover when clicking outside
+document.addEventListener('mousedown', e => {
+  const pop = document.getElementById('proj-link-modal');
+  if (pop && pop.style.display !== 'none' && !pop.contains(e.target) && !e.target.closest('.proj-link-chip')) {
+    closeProjLinkModal();
+  }
+});
 
 function editProjLink(pi, li) { openProjLinkModal(pi, li, true); }
 function addProjLink(pi)       { openProjLinkModal(pi, -1, false); }
