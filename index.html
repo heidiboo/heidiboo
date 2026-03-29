@@ -1076,21 +1076,28 @@
   /* Complete button */
   .workout-complete-row { padding: 8px 14px 4px; border-top: 1px solid var(--border); margin-top: 4px; }
   .workout-complete-btn {
-    width: 100%; padding: 7px; background: transparent; border: 1.5px solid #3a8a3a;
-    border-radius: 6px; color: #3a8a3a; font-size: 11px; cursor: pointer;
+    width: 100%; padding: 7px; background: transparent; border: 1.5px solid var(--ink);
+    border-radius: 6px; color: var(--ink); font-size: 11px; cursor: pointer;
     font-family: var(--sans); font-weight: 600; transition: all 0.15s;
   }
-  .workout-complete-btn:hover { background: #3a8a3a; color: #fff; }
+  .workout-complete-btn:hover { background: var(--ink); color: var(--bg); }
   /* Workout done / celebration card */
   .sched-workout-done-card {
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 12px; padding: 24px 18px; text-align: center; min-height: 180px;
+    display: flex; flex-direction: row; align-items: center;
+    gap: 12px; padding: 14px 16px; text-align: left;
     background: linear-gradient(135deg, #FFFBEB 0%, #FEF9F3 100%);
     border-color: #FDE68A !important;
   }
   .workout-done-sprite { flex-shrink: 0; }
-  .workout-done-title { font-size: 14px; font-weight: 700; color: var(--ink); }
-  .workout-done-sub { font-size: 12px; color: var(--ink2); margin-top: 2px; }
+  .workout-done-text { flex: 1; min-width: 0; }
+  .workout-done-title { font-size: 12px; font-weight: 700; color: var(--ink); }
+  .workout-done-sub { font-size: 11px; color: var(--ink2); margin-top: 2px; }
+  .workout-undo-btn {
+    margin-top: 8px; background: none; border: 1px solid var(--border); border-radius: 4px;
+    font-size: 10px; color: var(--ink2); cursor: pointer; padding: 2px 8px;
+    font-family: var(--sans); transition: all 0.1s;
+  }
+  .workout-undo-btn:hover { border-color: var(--ink); color: var(--ink); }
   /* Workout template cards */
   .wtpl-wrap { padding: 24px 32px 48px; }
   .wtpl-header-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
@@ -5864,6 +5871,11 @@ function completeWorkout(day) {
   renderSchedule();
 }
 
+function undoCompleteWorkout(day) {
+  delete _completedDays[day];
+  renderSchedule();
+}
+
 function addRoutineWorkoutEx(day) {
   const n = document.getElementById('rwadd-name-'+day);
   const s = document.getElementById('rwadd-sets-'+day);
@@ -6436,7 +6448,7 @@ function renderSchedule() {
       const workoutHtml = `
         <div class="sched-workout-card sched-workout-done-card">
           <div class="workout-done-sprite">
-            <svg viewBox="0 0 80 80" width="72" height="72" xmlns="http://www.w3.org/2000/svg">
+            <svg viewBox="0 0 80 80" width="52" height="52" xmlns="http://www.w3.org/2000/svg">
               <!-- soot sprite holding dumbbell, static -->
               <ellipse cx="40" cy="72" rx="14" ry="3.5" fill="rgba(0,0,0,0.08)"/>
               <!-- body fuzz -->
@@ -6468,6 +6480,7 @@ function renderSchedule() {
           <div class="workout-done-text">
             <div class="workout-done-title">Great job queen 👑</div>
             <div class="workout-done-sub">You finished <strong>${wName}</strong> day</div>
+            <button class="workout-undo-btn" onclick="event.stopPropagation();undoCompleteWorkout('${day}')">↩ Undo</button>
           </div>
         </div>`;
       return `
