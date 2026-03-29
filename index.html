@@ -3660,13 +3660,76 @@ function renderTOC() {
   const toc   = document.getElementById('doc-toc');
   const links = document.getElementById('doc-toc-links');
   if (!body || !toc || !links) return;
+
   const headings = [...body.querySelectorAll('h1,h2,h3')];
-  if (headings.length < 2) { toc.style.display = 'none'; return; }
-  // Assign IDs
-  headings.forEach((h, i) => { if (!h.id) h.id = 'h_' + i; });
-  links.innerHTML = headings.map(h =>
-    `<a href="#${h.id}" class="${h.tagName.toLowerCase()}" onclick="scrollToHeading('${h.id}',event)">${escHtml(h.textContent)}</a>`
-  ).join('');
+  let items = [];
+
+  if (headings.length >= 1) {
+    // ── Structured doc: headings as primary, bold paragraph openers as sub-items ──
+    const h1Count = headings.filter(h => h.tagName === 'H1').length;
+    let n1 = 0;
+    headings.forEach((h, i) => {
+      if (!h.id) h.id = 'toc_' + i;
+      const level = parseInt(h.tagName[1]);
+      if (level === 1) n1++;
+      items.push({ id: h.id, text: h.textContent.trim(), level, num: level === 1 ? n1 : null, el: h });
+    });
+    // Also pull bold openers from paragraphs as level-4 items
+    [...body.querySelectorAll('p, div')].forEach((p, pi) => {
+      const fc = p.firstElementChild;
+      if (fc && (fc.tagName === 'STRONG' || fc.tagName === 'B')) {
+        const text = fc.textContent.trim();
+        if (text.length > 2 && text.length < 70) {
+          const id = 'toc_b_' + pi;
+          fc.id = id;
+          items.push({ id, text, level: 4, el: fc });
+        }
+      }
+    });
+    // Sort by DOM position
+    items.sort((a, b) => a.el.compareDocumentPosition(b.el) & 4 ? -1 : 1);
+  } else {
+    // ── Unstructured doc: extract meaningful phrases from paragraphs ──
+    const candidates = [...body.querySelectorAll('p, li, h4, h5')].filter(el => {
+      const t = el.textContent.trim();
+      return t.length > 8;
+    });
+    let num = 0;
+    candidates.slice(0, 10).forEach((el, i) => {
+      // Take the first sentence or up to 60 chars
+      const full = el.textContent.trim();
+      const sentence = full.split(/(?<=[.!?])\s/)[0].trim();
+      const text = sentence.length > 65 ? sentence.slice(0, 62) + '…' : sentence;
+      if (!text) return;
+      const id = 'toc_p_' + i;
+      el.id = id;
+      num++;
+      items.push({ id, text, level: 1, num, el });
+    });
+  }
+
+  if (!items.length) { toc.style.display = 'none'; return; }
+
+  const h1Total = items.filter(it => it.level === 1).length;
+  let h1Idx = 0;
+  links.innerHTML = items.map(item => {
+    const t = escHtml(item.text);
+    if (item.level === 1) {
+      h1Idx++;
+      return `<a onclick="scrollToHeading('${item.id}',event)" style="display:flex;align-items:baseline;gap:5px;font-size:12px;color:var(--ink2);text-decoration:none;padding:3px 0;cursor:pointer" onmouseover="this.style.color='var(--ink)'" onmouseout="this.style.color='var(--ink2)'">
+        <span style="font-family:var(--mono);font-size:9px;color:var(--ink3);flex-shrink:0;min-width:14px">${h1Idx}.</span>
+        <span>${t}</span></a>`;
+    } else if (item.level === 2) {
+      return `<a onclick="scrollToHeading('${item.id}',event)" style="display:flex;align-items:baseline;gap:5px;padding:2px 0 2px 12px;font-size:11px;color:var(--ink2);text-decoration:none;cursor:pointer" onmouseover="this.style.color='var(--ink)'" onmouseout="this.style.color='var(--ink2)'">
+        <span style="color:var(--ink3);flex-shrink:0">•</span><span>${t}</span></a>`;
+    } else if (item.level === 3) {
+      return `<a onclick="scrollToHeading('${item.id}',event)" style="display:flex;align-items:baseline;gap:5px;padding:2px 0 2px 22px;font-size:11px;color:var(--ink2);text-decoration:none;cursor:pointer" onmouseover="this.style.color='var(--ink)'" onmouseout="this.style.color='var(--ink2)'">
+        <span style="color:var(--ink3);flex-shrink:0">◦</span><span>${t}</span></a>`;
+    } else {
+      return `<a onclick="scrollToHeading('${item.id}',event)" style="display:flex;align-items:baseline;gap:5px;padding:1px 0 1px 28px;font-size:10px;color:var(--ink3);text-decoration:none;cursor:pointer" onmouseover="this.style.color='var(--ink)'" onmouseout="this.style.color='var(--ink3)'">
+        <span style="flex-shrink:0">–</span><span>${t}</span></a>`;
+    }
+  }).join('');
   toc.style.display = 'block';
 }
 function scrollToHeading(id, e) {
@@ -3855,6 +3918,8 @@ const SLASH_COMMANDS = [
   { group: 'Media',   icon:'▶', label:'Video',          desc:'Embed YouTube/Loom',    cmd:'video' },
   { group: 'Tasks',   icon:'☑', label:'To-do',          desc:'Add a task to today',   cmd:'todo' },
   { group: 'Text',    icon:'▸', label:'Toggle',         desc:'Collapsible block',      cmd:'toggle' },
+  { group: 'AI',      icon:'✦', label:'Action Items',   desc:'Extract tasks from doc with AI', cmd:'ai-action-items' },
+  { group: 'AI',      icon:'✦', label:'Summarise',      desc:'Generate a summary of this doc', cmd:'ai-summary' },
 ];
 
 let slashRange = null;
@@ -4460,7 +4525,82 @@ function execSlash(cmd) {
       sel.addRange(delRange);
     }
   }
+  if (cmd === 'ai-action-items' || cmd === 'ai-summary') {
+    runDocAI(cmd);
+    return;
+  }
   insertBlock(cmd);
+}
+
+async function runDocAI(cmd) {
+  const editor = document.getElementById('doc-body-input');
+  const docText = editor.innerText?.trim();
+  if (!docText || docText.length < 20) {
+    alert('Add some content to the doc first.');
+    return;
+  }
+
+  // Insert a loading placeholder
+  const placeholderId = 'ai_ph_' + Date.now();
+  const isAction = cmd === 'ai-action-items';
+  document.execCommand('insertHTML', false,
+    `<div id="${placeholderId}" style="padding:10px 14px;border:1px dashed var(--border);border-radius:8px;color:var(--ink2);font-size:12px;font-style:italic">✦ ${isAction ? 'Extracting action items' : 'Summarising'}…</div><p><br></p>`
+  );
+
+  const apiKey = load('anthropicKey', '');
+  if (!apiKey) {
+    const key = prompt('Enter your Anthropic API key to use AI features (stored locally):');
+    if (!key) { document.getElementById(placeholderId)?.remove(); return; }
+    save('anthropicKey', key.trim());
+  }
+
+  const prompt = isAction
+    ? `Extract all action items, tasks, and things to do from the following document. Format them as a numbered list. Be concise. Only list concrete actionable items.\n\nDocument:\n${docText.slice(0, 4000)}`
+    : `Write a concise summary of the following document in 2-4 sentences, then list the key topics as bullet points.\n\nDocument:\n${docText.slice(0, 4000)}`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': load('anthropicKey', ''),
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-client-side-allow-cors': 'true',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 600,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message);
+    const text = data.content?.[0]?.text || '';
+
+    // Convert plain text response to HTML list
+    const lines = text.split('\n').filter(l => l.trim());
+    const htmlLines = lines.map(line => {
+      const trimmed = line.trim();
+      if (!trimmed) return '';
+      // Numbered item: "1. foo"
+      if (/^\d+\.\s/.test(trimmed)) return `<li>${escHtml(trimmed.replace(/^\d+\.\s*/,''))}</li>`;
+      // Bullet: "- foo" or "• foo"
+      if (/^[-•]\s/.test(trimmed)) return `<li>${escHtml(trimmed.replace(/^[-•]\s*/,''))}</li>`;
+      return `<p>${escHtml(trimmed)}</p>`;
+    }).join('');
+
+    const heading = isAction ? 'Action Items' : 'Summary';
+    const wrapped = `<h2>${heading}</h2><ol>${htmlLines}</ol><p><br></p>`;
+
+    const ph = document.getElementById(placeholderId);
+    if (ph) { ph.outerHTML = wrapped; }
+    else { document.execCommand('insertHTML', false, wrapped); }
+    autoSaveDoc();
+    renderTOC();
+  } catch (err) {
+    const ph = document.getElementById(placeholderId);
+    if (ph) ph.outerHTML = `<p style="color:#E74C3C;font-size:12px">AI error: ${escHtml(err.message)}</p>`;
+  }
 }
 
 function toggleCalloutPicker() {
