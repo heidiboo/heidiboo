@@ -375,6 +375,21 @@
   .badge-review { background: #FFF3E0; color: #B45309; }
   .badge-done { background: rgba(0,0,0,0.05); color: var(--ink2); }
   .badge-paused { background: #FEE2E2; color: #991B1B; }
+  .badge-sm { background: #EFF6FF; color: #1D4ED8; }
+  .badge-md { background: #FAF5FF; color: #7C3AED; }
+  .badge-lg { background: #FFF7ED; color: #C2410C; }
+  .proj-row-click { cursor: pointer; transition: background 0.12s; }
+  .proj-row-click:hover td { background: rgba(0,0,0,0.02); }
+  .proj-detail-header { display: flex; align-items: flex-start; gap: 24px; padding: 20px 0 24px; border-bottom: 1px solid var(--border); margin-bottom: 24px; flex-wrap: wrap; }
+  .proj-detail-meta { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+  .proj-docs-picker-modal { position: fixed; inset: 0; z-index: 8000; background: rgba(0,0,0,0.25); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; }
+  .proj-docs-picker-box { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); width: 520px; max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 8px 40px rgba(0,0,0,0.15); overflow: hidden; }
+  .proj-docs-picker-list { overflow-y: auto; flex: 1; padding: 8px 0; }
+  .proj-docs-picker-item { display: flex; align-items: center; gap: 12px; padding: 10px 20px; cursor: pointer; transition: background 0.1s; }
+  .proj-docs-picker-item:hover { background: rgba(0,0,0,0.03); }
+  .proj-docs-picker-item.linked { background: rgba(0,0,0,0.03); }
+  .proj-docs-picker-check { width: 16px; height: 16px; border: 1.5px solid var(--border); border-radius: 4px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+  .proj-docs-picker-check.on { background: var(--ink); border-color: var(--ink); color: #fff; font-size: 10px; }
 
   .progress-bar { height: 4px; background: rgba(0,0,0,0.07); border-radius: 2px; overflow: hidden; width: 80px; }
   .progress-fill { height: 100%; border-radius: 2px; background: var(--ink); }
@@ -1557,52 +1572,79 @@
 
     <!-- PROJECTS TAB -->
     <div class="tab" id="tab-projects">
-      <div class="section-header">
-        <div class="section-title">Projects</div>
-      </div>
-      <div class="card section-gap">
-        <table class="project-table">
-          <thead>
-            <tr>
-              <th>Project</th>
-              <th>Status</th>
-              <th>Phase</th>
-              <th>Progress</th>
-              <th>Due</th>
-              <th>Docs</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="project-list"></tbody>
-        </table>
-        <div class="add-form">
-          <input type="text" id="proj-name" placeholder="Project name" style="flex:2">
-          <input type="text" id="proj-team" placeholder="Team / PM" style="flex:1">
-          <select id="proj-status">
-            <option value="Active">Active</option>
-            <option value="Review">In Review</option>
-            <option value="Done">Done</option>
-            <option value="Paused">Paused</option>
-          </select>
-          <select id="proj-phase">
-            <option>Discovery</option>
-            <option>Define</option>
-            <option>Design</option>
-            <option>Prototype</option>
-            <option>Test</option>
-            <option>Handoff</option>
-          </select>
-          <input type="range" id="proj-progress" min="0" max="100" value="25" style="width:80px">
-          <input type="date" id="proj-due" style="flex:1">
-          <button class="btn btn-primary" onclick="addProject()">+ Add</button>
+      <!-- LIST VIEW -->
+      <div id="proj-list-view">
+        <div class="section-header" style="padding-bottom:16px">
+          <div class="section-title">Projects</div>
+          <button class="btn btn-primary" onclick="toggleAddProject()" id="proj-add-btn" style="font-size:12px;padding:6px 14px">+ New Project</button>
+        </div>
+        <div class="card section-gap">
+          <table class="project-table">
+            <thead>
+              <tr>
+                <th>Project</th>
+                <th>Status</th>
+                <th>Size</th>
+                <th>Phase</th>
+                <th>Progress</th>
+                <th>Due</th>
+                <th>Docs</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="project-list"></tbody>
+          </table>
+          <div class="add-form" id="proj-add-form" style="display:none">
+            <input type="text" id="proj-name" placeholder="Project name" style="flex:2">
+            <input type="text" id="proj-team" placeholder="Team / PM" style="flex:1">
+            <select id="proj-status">
+              <option value="Active">Active</option>
+              <option value="Review">In Review</option>
+              <option value="Done">Done</option>
+              <option value="Paused">Paused</option>
+            </select>
+            <select id="proj-size">
+              <option value="Small">Small</option>
+              <option value="Medium">Medium</option>
+              <option value="Large">Large</option>
+            </select>
+            <select id="proj-phase">
+              <option>Discovery</option>
+              <option>Define</option>
+              <option>Design</option>
+              <option>Prototype</option>
+              <option>Test</option>
+              <option>Handoff</option>
+            </select>
+            <input type="range" id="proj-progress" min="0" max="100" value="25" style="width:80px">
+            <input type="date" id="proj-due" style="flex:1">
+            <button class="btn btn-primary" onclick="addProject()">+ Add</button>
+          </div>
         </div>
       </div>
-      <div id="project-docs-section" style="display:none;margin-top:24px">
-        <div class="section-header">
-          <div style="font-size:1rem;font-weight:500" id="project-docs-title">Project Docs</div>
-          <button class="btn btn-primary" style="font-size:0.8rem" onclick="openDoc(null, currentProjectFilter)">+ Add Doc</button>
+      <!-- DETAIL VIEW -->
+      <div id="proj-detail-view" style="display:none">
+        <div class="section-header" style="padding-bottom:16px">
+          <button class="btn" onclick="closeProject()" style="font-size:12px;padding:5px 12px;border:1px solid var(--border);background:transparent;color:var(--ink2)">← Projects</button>
         </div>
-        <div id="project-docs-list" class="docs-grid"></div>
+        <div id="proj-detail-content"></div>
+      </div>
+    </div>
+    <!-- DOCS PICKER MODAL -->
+    <div id="proj-docs-picker" class="proj-docs-picker-modal" style="display:none" onclick="if(event.target===this)closeProjectDocsPicker()">
+      <div class="proj-docs-picker-box">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)">
+          <span style="font-size:13px;font-weight:600">Link Docs</span>
+          <button onclick="closeProjectDocsPicker()" style="background:none;border:none;cursor:pointer;font-size:16px;color:var(--ink2);line-height:1">×</button>
+        </div>
+        <div style="padding:10px 20px;border-bottom:1px solid var(--border)">
+          <input id="proj-docs-picker-search" type="text" placeholder="Search docs…" oninput="renderProjectDocsPicker()" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--sans);font-size:12px;background:var(--bg);color:var(--ink);outline:none;box-sizing:border-box">
+        </div>
+        <div class="proj-docs-picker-list" id="proj-docs-picker-list"></div>
+        <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end">
+          <button class="btn" onclick="createDocForProject()" style="font-size:12px;padding:6px 14px;border:1px solid var(--border);background:transparent;color:var(--ink2)">+ Create New Doc</button>
+          <button class="btn btn-primary" onclick="closeProjectDocsPicker()" style="font-size:12px;padding:6px 14px">Done</button>
+        </div>
       </div>
     </div>
     <!-- TASKS TAB -->
@@ -2661,18 +2703,22 @@ function renderAll() {
 
 function renderProjects() {
   const tbody = document.getElementById('project-list');
-  if (!projects.length) { tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">No projects yet — add your first one below</div></td></tr>'; return; }
+  if (!projects.length) { tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state">No projects yet — click New Project to get started</div></td></tr>'; return; }
+  const statusBadge = { Active:'badge-active', Review:'badge-review', Done:'badge-done', Paused:'badge-paused' };
+  const sizeBadge = { Small:'badge-sm', Medium:'badge-md', Large:'badge-lg' };
   tbody.innerHTML = projects.map((p, i) => {
-    const badgeClass = { Active:'badge-active', Review:'badge-review', Done:'badge-done', Paused:'badge-paused' }[p.status] || 'badge-active';
-    const docCount = docs.filter(d => d.project === p.name).length;
-    return `<tr>
-      <td><div class="project-name">${p.name}<small>${p.team || ''}</small></div></td>
-      <td><span class="badge ${badgeClass}">${p.status}</span></td>
-      <td style="color:var(--ink2);font-size:0.85rem">${p.phase}</td>
-      <td><div class="progress-bar"><div class="progress-fill" style="width:${p.progress}%"></div></div><small style="color:var(--ink2);font-size:0.75rem">${p.progress}%</small></td>
-      <td style="color:var(--ink2);font-size:0.85rem">${p.due || '—'}</td>
-      <td><button class="btn" style="font-size:0.75rem;padding:4px 10px;background:var(--surface2);border:1px solid var(--border);color:var(--ink2)" onclick="viewProjectDocs('${p.name}')">📄 ${docCount} doc${docCount !== 1 ? 's' : ''}</button></td>
-      <td><button class="btn btn-danger" onclick="deleteItem('projects',${i})">✕</button></td>
+    const docCount = docs.filter(d => d.project === p.name || (d.projectId === p.id)).length;
+    const sc = statusBadge[p.status] || 'badge-active';
+    const zc = sizeBadge[p.size] || 'badge-sm';
+    return `<tr class="proj-row-click" onclick="openProject(${i})">
+      <td><div class="project-name">${escHtml(p.name)}<small>${escHtml(p.team || '')}</small></div></td>
+      <td><span class="badge ${sc}">${p.status}</span></td>
+      <td><span class="badge ${zc}">${p.size || 'Small'}</span></td>
+      <td style="color:var(--ink2);font-size:11px">${p.phase}</td>
+      <td><div class="progress-bar"><div class="progress-fill" style="width:${p.progress}%"></div></div><small style="color:var(--ink2);font-size:11px">${p.progress}%</small></td>
+      <td style="color:var(--ink2);font-size:11px">${p.due || '—'}</td>
+      <td onclick="event.stopPropagation();openProjectDocsPicker(${i})"><button class="btn" style="font-size:11px;padding:3px 10px;background:var(--surface2);border:1px solid var(--border);color:var(--ink2)">📄 ${docCount} doc${docCount !== 1 ? 's' : ''}</button></td>
+      <td onclick="event.stopPropagation()"><button class="btn btn-danger" onclick="deleteProject(${i})">✕</button></td>
     </tr>`;
   }).join('');
 }
@@ -3011,20 +3057,41 @@ function toggleTodo(i) {}
 function deleteTodo(i) {}
 
 // ---- ACTIONS ----
+function toggleAddProject() {
+  const form = document.getElementById('proj-add-form');
+  const btn = document.getElementById('proj-add-btn');
+  const showing = form.style.display !== 'none';
+  form.style.display = showing ? 'none' : 'flex';
+  btn.textContent = showing ? '+ New Project' : '× Cancel';
+  if (!showing) document.getElementById('proj-name').focus();
+}
+
 function addProject() {
   const name = document.getElementById('proj-name').value.trim();
   if (!name) return;
   projects.push({
+    id: 'proj_' + Date.now(),
     name,
     team: document.getElementById('proj-team').value,
     status: document.getElementById('proj-status').value,
+    size: document.getElementById('proj-size').value,
     phase: document.getElementById('proj-phase').value,
-    progress: document.getElementById('proj-progress').value,
+    progress: parseInt(document.getElementById('proj-progress').value) || 0,
     due: document.getElementById('proj-due').value,
+    createdAt: new Date().toISOString(),
   });
   save('projects', projects);
   document.getElementById('proj-name').value = '';
   document.getElementById('proj-team').value = '';
+  // hide form
+  document.getElementById('proj-add-form').style.display = 'none';
+  document.getElementById('proj-add-btn').textContent = '+ New Project';
+  renderProjects(); renderOverview();
+}
+
+function deleteProject(i) {
+  projects.splice(i, 1);
+  save('projects', projects);
   renderProjects(); renderOverview();
 }
 
@@ -5612,26 +5679,131 @@ function toggleDocTodoCheck(taskId, el) {
   if (found) { save('taskDays', taskDays); renderTodos(); renderFocusTodos(); }
 }
 
-function viewProjectDocs(projectName) {
-  currentProjectFilter = projectName;
-  const section = document.getElementById('project-docs-section');
-  const title = document.getElementById('project-docs-title');
-  const listEl = document.getElementById('project-docs-list');
-  title.textContent = `Docs — ${projectName}`;
-  section.style.display = 'block';
-  const filtered = docs.filter(d => d.project === projectName);
-  if (!filtered.length) {
-    listEl.innerHTML = `<div class="empty-state" style="grid-column:1/-1">No docs for this project yet</div>`;
-  } else {
-    listEl.innerHTML = filtered.map(d => `
-      <div class="doc-card" onclick="openDoc('${d.id}')">
-        <div class="doc-card-title">${d.title || 'Untitled'}</div>
-        <div class="doc-card-preview">${(d.body||'').replace(/<[^>]*>/g,'').slice(0,100)}…</div>
-        <div class="doc-card-meta"><span>${d.updatedAt || ''}</span></div>
+let _currentProjectIdx = -1;
+
+function openProject(i) {
+  _currentProjectIdx = i;
+  const p = projects[i];
+  document.getElementById('proj-list-view').style.display = 'none';
+  document.getElementById('proj-detail-view').style.display = 'block';
+  renderProjectDetail();
+}
+
+function closeProject() {
+  _currentProjectIdx = -1;
+  document.getElementById('proj-list-view').style.display = 'block';
+  document.getElementById('proj-detail-view').style.display = 'none';
+}
+
+function renderProjectDetail() {
+  const i = _currentProjectIdx;
+  if (i < 0 || i >= projects.length) { closeProject(); return; }
+  const p = projects[i];
+  const statusBadge = { Active:'badge-active', Review:'badge-review', Done:'badge-done', Paused:'badge-paused' };
+  const sizeBadge = { Small:'badge-sm', Medium:'badge-md', Large:'badge-lg' };
+  const sc = statusBadge[p.status] || 'badge-active';
+  const zc = sizeBadge[p.size] || 'badge-sm';
+  const projDocs = docs.filter(d => d.project === p.name);
+  const el = document.getElementById('proj-detail-content');
+  el.innerHTML = `
+    <div class="proj-detail-header">
+      <div style="flex:1;min-width:220px">
+        <div style="font-size:22px;font-weight:700;font-family:var(--mono)">${escHtml(p.name)}</div>
+        ${p.team ? `<div style="font-size:12px;color:var(--ink2);margin-top:4px">${escHtml(p.team)}</div>` : ''}
+        <div class="proj-detail-meta">
+          <span class="badge ${sc}">${p.status}</span>
+          <span class="badge ${zc}">${p.size || 'Small'}</span>
+          <span style="font-size:11px;color:var(--ink2);background:rgba(0,0,0,0.05);padding:2px 9px;border-radius:20px">${p.phase}</span>
+          ${p.due ? `<span style="font-size:11px;color:var(--ink2)">Due ${p.due}</span>` : ''}
+        </div>
       </div>
-    `).join('');
+      <div style="min-width:160px">
+        <div style="font-size:11px;color:var(--ink2);margin-bottom:6px;font-family:var(--mono);letter-spacing:0.05em">PROGRESS</div>
+        <div class="progress-bar" style="width:100%;margin-bottom:4px"><div class="progress-fill" style="width:${p.progress}%"></div></div>
+        <div style="font-size:11px;color:var(--ink2)">${p.progress}%</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div style="font-family:var(--mono);font-size:11px;letter-spacing:0.08em;color:var(--ink2);text-transform:uppercase">Docs // ${projDocs.length}</div>
+      <button class="btn btn-primary" onclick="openProjectDocsPicker(${i})" style="font-size:12px;padding:6px 14px">+ Link Docs</button>
+    </div>
+    ${projDocs.length ? `<div class="docs-grid">${projDocs.map(d => `
+      <div class="doc-card" onclick="openDoc('${d.id}')">
+        <div class="doc-card-title">${escHtml(d.title || 'Untitled')}</div>
+        <div class="doc-card-preview">${escHtml((d.body||'').replace(/<[^>]*>/g,'').slice(0,100))}</div>
+        <div class="doc-card-meta"><span>${d.updatedAt || ''}</span></div>
+      </div>`).join('')}</div>`
+    : `<div class="empty-state">No docs linked yet — click Link Docs to attach existing docs or create a new one</div>`}
+  `;
+}
+
+// ── DOCS PICKER ──
+let _pickerProjectIdx = -1;
+
+function openProjectDocsPicker(i) {
+  _pickerProjectIdx = i;
+  currentProjectFilter = projects[i]?.name || null;
+  document.getElementById('proj-docs-picker').style.display = 'flex';
+  document.getElementById('proj-docs-picker-search').value = '';
+  renderProjectDocsPicker();
+}
+
+function closeProjectDocsPicker() {
+  document.getElementById('proj-docs-picker').style.display = 'none';
+  _pickerProjectIdx = -1;
+  // re-render to update doc counts
+  renderProjects();
+  if (_currentProjectIdx >= 0) renderProjectDetail();
+}
+
+function renderProjectDocsPicker() {
+  const p = projects[_pickerProjectIdx];
+  if (!p) return;
+  const q = (document.getElementById('proj-docs-picker-search')?.value || '').toLowerCase();
+  const el = document.getElementById('proj-docs-picker-list');
+  const filtered = docs.filter(d => !d.folder || true).filter(d =>
+    !q || (d.title || '').toLowerCase().includes(q)
+  );
+  if (!filtered.length) {
+    el.innerHTML = `<div style="padding:20px;text-align:center;font-size:12px;color:var(--ink2)">No docs found</div>`;
+    return;
   }
-  section.scrollIntoView({ behavior: 'smooth' });
+  el.innerHTML = filtered.map(d => {
+    const linked = d.project === p.name;
+    return `<div class="proj-docs-picker-item${linked ? ' linked' : ''}" onclick="toggleDocProjectLink('${d.id}')">
+      <div class="proj-docs-picker-check${linked ? ' on' : ''}">${linked ? '✓' : ''}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(d.title || 'Untitled')}</div>
+        <div style="font-size:11px;color:var(--ink2);margin-top:1px">${d.updatedAt || ''}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleDocProjectLink(docId) {
+  const p = projects[_pickerProjectIdx];
+  if (!p) return;
+  const d = docs.find(doc => doc.id === docId);
+  if (!d) return;
+  if (d.project === p.name) {
+    d.project = '';
+  } else {
+    d.project = p.name;
+  }
+  save('docs', docs);
+  renderProjectDocsPicker();
+}
+
+function createDocForProject() {
+  const p = projects[_pickerProjectIdx];
+  closeProjectDocsPicker();
+  openDoc(null, p?.name || null);
+}
+
+function viewProjectDocs(projectName) {
+  // legacy — find project index and open detail
+  const i = projects.findIndex(p => p.name === projectName);
+  if (i >= 0) openProject(i);
 }
 
 // ---- TABS ----
@@ -6489,7 +6661,14 @@ function weekKeyToLabel(wk) {
 }
 
 function loadScheduleHistory() {
-  scheduleHistory = load('scheduleHistory', {});
+  let raw = load('scheduleHistory', {});
+  // Purge any keys that aren't valid YYYY-MM-DD Sunday dates (e.g. old "2026-W13" format)
+  Object.keys(raw).forEach(wk => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(wk) || isNaN(new Date(wk + 'T12:00:00').getTime())) {
+      delete raw[wk];
+    }
+  });
+  scheduleHistory = raw;
   // Ensure current week exists
   currentScheduleWeek = getISOWeekKey(new Date());
   if (!scheduleHistory[currentScheduleWeek]) {
@@ -6505,6 +6684,8 @@ function saveCurrentWeek() {
 }
 
 function switchScheduleWeek(wk) {
+  // Guard: ignore invalid keys
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(wk) || isNaN(new Date(wk + 'T12:00:00').getTime())) return;
   // Save current before switching
   saveCurrentWeek();
   currentScheduleWeek = wk;
