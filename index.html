@@ -5997,16 +5997,16 @@ function renderProjectDetail() {
 
   const linkChips = p.links.map((l, li) => {
     const hasUrl = l.url && l.url.trim();
-    return `<div class="proj-link-chip${hasUrl ? ' has-url' : ''}" title="${hasUrl ? l.url : 'Click to add URL'}">
+    return `<div class="proj-link-chip${hasUrl ? ' has-url' : ''}" title="${hasUrl ? l.url : 'Click to add URL'}" onclick="editProjLink(${i},${li})">
       ${hasUrl
-        ? `<a href="${escHtml(l.url)}" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:5px;color:inherit;text-decoration:none;flex:1;min-width:0">
+        ? `<a href="${escHtml(l.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:5px;color:inherit;text-decoration:none;flex:1;min-width:0">
              <span>${l.icon}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(l.label)}</span>
            </a>`
-        : `<span onclick="editProjLink(${i},${li})" style="display:flex;align-items:center;gap:5px;cursor:pointer;flex:1;min-width:0;opacity:0.5">
+        : `<span style="display:flex;align-items:center;gap:5px;flex:1;min-width:0;opacity:0.5">
              <span>${l.icon}</span><span>${escHtml(l.label)}</span>
            </span>`}
-      <button onclick="editProjLink(${i},${li})" class="proj-link-edit" title="Edit">✎</button>
-      ${li >= DEFAULT_PROJ_LINKS.length ? `<button onclick="removeProjLink(${i},${li})" class="proj-link-del" title="Remove">×</button>` : ''}
+      <button onclick="event.stopPropagation();editProjLink(${i},${li})" class="proj-link-edit" title="Edit">✎</button>
+      ${li >= DEFAULT_PROJ_LINKS.length ? `<button onclick="event.stopPropagation();removeProjLink(${i},${li})" class="proj-link-del" title="Remove">×</button>` : ''}
     </div>`;
   }).join('');
 
