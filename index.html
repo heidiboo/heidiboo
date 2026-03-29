@@ -378,7 +378,7 @@
   .badge-sm { background: #EFF6FF; color: #1D4ED8; }
   .badge-md { background: #FAF5FF; color: #7C3AED; }
   .badge-lg { background: #FFF7ED; color: #C2410C; }
-  .badge-select { border: none; outline: none; cursor: pointer; padding: 2px 9px; border-radius: 20px; font-size: 10px; font-weight: 500; font-family: var(--sans); appearance: none; -webkit-appearance: none; }
+  .badge-select { border: none; outline: none; cursor: pointer; padding: 2px 6px 2px 9px; border-radius: 20px; font-size: 10px; font-weight: 500; font-family: var(--sans); }
   .badge-select:focus { box-shadow: 0 0 0 2px rgba(0,0,0,0.15); }
   .badge-phase { background: rgba(0,0,0,0.05); color: var(--ink2); }
   .folder-drag-over { background: rgba(0,0,0,0.05) !important; border-radius: var(--radius-sm); }
@@ -2743,25 +2743,25 @@ function renderProjects() {
   const sizeBadge = { Small:'badge-sm', Medium:'badge-md', Large:'badge-lg' };
   const mkStatusSel = (p,i) => {
     const cls = statusBadge[p.status]||'badge-active';
-    return `<select class="badge-select ${cls}" onchange="updateProject(${i},'status',this.value)" onclick="event.stopPropagation()">
+    return `<select class="badge-select ${cls}" onchange="updateProject(${i},'status',this.value)">
       ${['Active','Review','Done','Paused'].map(s=>`<option${p.status===s?' selected':''}>${s}</option>`).join('')}
     </select>`;
   };
   const mkSizeSel = (p,i) => {
     const cls = sizeBadge[p.size||'Small']||'badge-sm';
-    return `<select class="badge-select ${cls}" onchange="updateProject(${i},'size',this.value)" onclick="event.stopPropagation()">
+    return `<select class="badge-select ${cls}" onchange="updateProject(${i},'size',this.value)">
       ${['Small','Medium','Large'].map(s=>`<option${(p.size||'Small')===s?' selected':''}>${s}</option>`).join('')}
     </select>`;
   };
-  const mkPhaseSel = (p,i) => `<select class="badge-select badge-phase" onchange="updateProject(${i},'phase',this.value)" onclick="event.stopPropagation()">
+  const mkPhaseSel = (p,i) => `<select class="badge-select badge-phase" onchange="updateProject(${i},'phase',this.value)">
     ${['Discovery','Define','Design','Prototype','Test','Handoff'].map(s=>`<option${p.phase===s?' selected':''}>${s}</option>`).join('')}
   </select>`;
   tbody.innerHTML = projects.map((p, i) => {
     return `<tr class="proj-row-click" onclick="openProject(${i})">
       <td><div class="project-name">${escHtml(p.name)}<small>${escHtml(p.team || '')}</small></div></td>
-      <td>${mkStatusSel(p,i)}</td>
-      <td>${mkSizeSel(p,i)}</td>
-      <td>${mkPhaseSel(p,i)}</td>
+      <td onclick="event.stopPropagation()">${mkStatusSel(p,i)}</td>
+      <td onclick="event.stopPropagation()">${mkSizeSel(p,i)}</td>
+      <td onclick="event.stopPropagation()">${mkPhaseSel(p,i)}</td>
       <td><div class="progress-bar"><div class="progress-fill" style="width:${p.progress}%"></div></div><small style="color:var(--ink2);font-size:11px">${p.progress}%</small></td>
       <td style="color:var(--ink2);font-size:11px">${p.due || '—'}</td>
       <td onclick="event.stopPropagation()"><button class="btn btn-danger" onclick="deleteProject(${i})">✕</button></td>
