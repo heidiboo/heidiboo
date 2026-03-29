@@ -2544,7 +2544,7 @@ function hideSyncStatus() {
 }
 
 // ---- STATE ----
-let projects = [], workGoals = [], personalGoals = [], cases = [], skills = [], notes = [], todos = [], docs = [], taskDays = [], docFolders = [], trashedDocs = [], lockedDocs = [];
+let projects = [], workGoals = [], personalGoals = [], cases = [], skills = [], notes = [], todos = [], docs = [], taskDays = [], docFolders = [], trashedDocs = [], lockedDocs = [], trashedFolders = [];
 let currentDocId = null;
 let currentProjectFilter = null;
 
@@ -2567,6 +2567,10 @@ function loadAll() {
   docFolders = load('docFolders', []);
   trashedDocs = load('trashedDocs', []);
   lockedDocs = load('lockedDocs', []);
+  trashedFolders = load('trashedFolders', []);
+  // Auto-purge trashed folders older than 30 days
+  trashedFolders = trashedFolders.filter(f => f.trashedAt > Date.now() - 30 * 24 * 60 * 60 * 1000);
+  save('trashedFolders', trashedFolders);
   // Auto-purge trash older than 30 days
   const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
   trashedDocs = trashedDocs.filter(d => d.trashedAt > cutoff);
@@ -3308,8 +3312,13 @@ document.addEventListener('click', function(e) {
 });
 
 function deleteFolder(id) {
-  if (!confirm('Delete this folder? Docs inside will move to All Docs.')) return;
-  // Move docs out of folder
+  const folder = docFolders.find(f => f.id === id);
+  if (!folder) return;
+  // Snapshot the folder and which doc IDs belong to it
+  const docIds = docs.filter(d => d.folder === id).map(d => d.id);
+  trashedFolders.push({ ...folder, trashedAt: Date.now(), docIds });
+  save('trashedFolders', trashedFolders);
+  // Move docs out of folder (keep them in All Docs)
   docs.forEach(d => { if (d.folder === id) d.folder = ''; });
   save('docs', docs);
   docFolders = docFolders.filter(f => f.id !== id);
@@ -3317,6 +3326,7 @@ function deleteFolder(id) {
   if (currentFolder === id) selectFolder('all');
   renderFolders();
   renderDocs();
+  renderTrash();
 }
 
 function renderDocs(filterProject) {
@@ -3420,8 +3430,24 @@ function trashDoc(id) {
 function renderTrash() {
   const el = document.getElementById('trash-list');
   if (!el) return;
-  if (!trashedDocs.length) { el.innerHTML = '<div class="empty-state" style="grid-column:1/-1">Trash is empty</div>'; return; }
-  el.innerHTML = trashedDocs.map((d, i) => {
+  if (!trashedDocs.length && !trashedFolders.length) {
+    el.innerHTML = '<div class="empty-state" style="grid-column:1/-1">Trash is empty</div>';
+    return;
+  }
+  const folderCards = trashedFolders.map((f, i) => {
+    const daysLeft = Math.max(0, 30 - Math.floor((Date.now() - f.trashedAt) / 86400000));
+    return `
+      <div class="doc-card" style="opacity:0.8;background:var(--surface2)">
+        <div class="doc-card-actions" style="display:flex" onclick="event.stopPropagation()">
+          <button class="doc-card-action-btn" onclick="recoverFolder(${i})" title="Recover folder">↩ Recover</button>
+          <button class="doc-card-action-btn trash" onclick="permanentlyDeleteFolder(${i})" title="Delete forever">✕</button>
+        </div>
+        <div class="doc-card-title">${f.icon||'📂'} ${escHtml(f.name)}</div>
+        <div class="doc-card-preview" style="color:var(--ink2)">${f.docIds?.length || 0} doc${(f.docIds?.length||0)===1?'':'s'} inside</div>
+        <div class="doc-card-meta"><span style="color:var(--accent)">${daysLeft}d left</span><span style="font-size:9px;padding:2px 6px;background:rgba(0,0,0,0.05);border-radius:8px">Folder</span></div>
+      </div>`;
+  }).join('');
+  const docCards = trashedDocs.map((d, i) => {
     const daysLeft = Math.max(0, 30 - Math.floor((Date.now() - d.trashedAt) / 86400000));
     return `
       <div class="doc-card" style="opacity:0.75">
@@ -3432,9 +3458,9 @@ function renderTrash() {
         <div class="doc-card-title">${d.title || 'Untitled'}</div>
         <div class="doc-card-preview">${(d.body || '').replace(/<[^>]*>/g,'').slice(0,80)}…</div>
         <div class="doc-card-meta"><span style="color:var(--accent)">${daysLeft}d left</span><span>${d.updatedAt || ''}</span></div>
-      </div>
-    `;
+      </div>`;
   }).join('');
+  el.innerHTML = folderCards + docCards;
 }
 
 function recoverDoc(i) {
@@ -3455,11 +3481,41 @@ function permanentlyDeleteDoc(i) {
   renderFolders();
 }
 
+function recoverFolder(i) {
+  const f = trashedFolders[i];
+  if (!f) return;
+  // Restore the folder
+  const { trashedAt, docIds, ...folderData } = f;
+  docFolders.push(folderData);
+  save('docFolders', docFolders);
+  // Re-assign docs that were in this folder (still exist in docs or trashedDocs)
+  (docIds || []).forEach(docId => {
+    const d = docs.find(d => d.id === docId);
+    if (d) d.folder = folderData.id;
+  });
+  save('docs', docs);
+  trashedFolders.splice(i, 1);
+  save('trashedFolders', trashedFolders);
+  renderTrash();
+  renderFolders();
+  renderDocs();
+}
+
+function permanentlyDeleteFolder(i) {
+  if (!confirm('Permanently delete this folder? This cannot be undone.')) return;
+  trashedFolders.splice(i, 1);
+  save('trashedFolders', trashedFolders);
+  renderTrash();
+}
+
 function emptyTrash() {
-  if (!trashedDocs.length) return;
-  if (!confirm(`Permanently delete all ${trashedDocs.length} doc${trashedDocs.length > 1 ? 's' : ''} in trash?`)) return;
+  const total = trashedDocs.length + trashedFolders.length;
+  if (!total) return;
+  if (!confirm(`Permanently delete everything in trash? This cannot be undone.`)) return;
   trashedDocs = [];
+  trashedFolders = [];
   save('trashedDocs', trashedDocs);
+  save('trashedFolders', trashedFolders);
   renderTrash();
   renderFolders();
 }
@@ -3495,7 +3551,8 @@ function openDoc(id, projectName) {
   } else {
     const newId = 'doc_' + Date.now();
     const now = new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
-    const newDoc = { id: newId, title: '', body: '', project: projectName || '', updatedAt: now, createdAt: now, updatedTs: Date.now(), tags: [], cover: '' };
+    const autoFolder = (!projectName && currentFolder !== 'all' && currentFolder !== 'trash') ? currentFolder : '';
+    const newDoc = { id: newId, title: '', body: '', project: projectName || '', folder: autoFolder, updatedAt: now, createdAt: now, updatedTs: Date.now(), tags: [], cover: '' };
     docs.push(newDoc);
     save('docs', docs);
     renderDocs();
