@@ -3328,6 +3328,7 @@ function renderDocs(filterProject) {
   } else if (currentFolder !== 'all') {
     list = docs.filter(d => d.folder === currentFolder);
   }
+  list = [...list].sort((a, b) => (b.updatedTs || 0) - (a.updatedTs || 0));
   if (!list.length) {
     el.innerHTML = `<div class="empty-state" style="grid-column:1/-1">${filterProject ? 'No docs for this project yet' : 'No docs here yet'}</div>`;
     return;
@@ -3494,7 +3495,7 @@ function openDoc(id, projectName) {
   } else {
     const newId = 'doc_' + Date.now();
     const now = new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
-    const newDoc = { id: newId, title: '', body: '', project: projectName || '', updatedAt: now, createdAt: now, tags: [], cover: '' };
+    const newDoc = { id: newId, title: '', body: '', project: projectName || '', updatedAt: now, createdAt: now, updatedTs: Date.now(), tags: [], cover: '' };
     docs.push(newDoc);
     save('docs', docs);
     renderDocs();
@@ -3526,7 +3527,7 @@ function autoSaveDoc() {
   const now = new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
   const idx = docs.findIndex(d => d.id === currentDocId);
   if (idx > -1) {
-    docs[idx] = { ...docs[idx], title, body, project, updatedAt: now };
+    docs[idx] = { ...docs[idx], title, body, project, updatedAt: now, updatedTs: Date.now() };
     save('docs', docs);
     renderDocs();
     // Flash "Saved" indicator
