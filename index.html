@@ -6876,15 +6876,17 @@ function renderSchedule() {
     d.blocks.forEach((b,bi) => {
       const mins = schedToMins(b.time);
       const hr = Math.floor(mins / 60);
-      if (mins < 9999 && hr >= 7 && hr <= 23) {
+      if (mins < 9999 && hr >= 0 && hr <= 27) {
         (byHour[hr] = byHour[hr]||[]).push({b,bi});
         if (b.timeEnd) {
           const endMins = schedToMins(b.timeEnd);
           const endHr = Math.ceil(endMins / 60);
-          for (let sh = hr + 1; sh < endHr && sh <= 23; sh++) spannedHours.add(sh);
+          for (let sh = hr + 1; sh < endHr; sh++) spannedHours.add(sh);
         }
       } else unplaced.push({b,bi});
     });
+    // Build display hours: standard grid + any extra hours blocks actually use
+    const displayHours = [...new Set([...SCHED_HOURS, ...Object.keys(byHour).map(Number)])].sort((a,b)=>a-b);
     const mkBlock = (b,bi) => {
       let spanStyle = '', spanClass = '', durLabel = '';
       if (b.timeEnd) {
@@ -6911,7 +6913,7 @@ function renderSchedule() {
         <div class="sblock-resize sblock-resize-bottom" onmousedown="schedResizeStart(event,'${day}',${bi},'bottom')"></div>
       </div>`;
     };
-    const timelineHtml = SCHED_HOURS.map(h => {
+    const timelineHtml = displayHours.map(h => {
       const items = (byHour[h]||[]).map(({b,bi})=>mkBlock(b,bi)).join('');
       if (!items && spannedHours.has(h)) return ''; // hide rows covered by spanning block
       const slotContent = items || `<div class="sched-hour-empty" onclick="schedInlineAdd('${day}',${h})"></div>`;
