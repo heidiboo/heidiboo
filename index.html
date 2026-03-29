@@ -5717,6 +5717,56 @@ function startSaveSprite(onDone) {
 const WORKOUT_TYPES = ['Push','Pull','Legs','Cardio','Upper','Lower','Full Body','Custom'];
 let _schedMode = 'week';
 let workoutTemplates = load('workoutTemplates', []);
+if (!workoutTemplates.length) {
+  workoutTemplates = [
+    { id:'tpl-push', name:'Push Day', type:'Push', exercises:[
+      {name:'Bench Press',         sets:'4 × 8'},
+      {name:'Incline DB Press',    sets:'3 × 10'},
+      {name:'Overhead Press',      sets:'3 × 8'},
+      {name:'Lateral Raises',      sets:'4 × 12'},
+      {name:'Tricep Pushdown',     sets:'3 × 12'},
+      {name:'Skull Crushers',      sets:'3 × 10'},
+    ]},
+    { id:'tpl-pull', name:'Pull Day', type:'Pull', exercises:[
+      {name:'Deadlift',            sets:'4 × 5'},
+      {name:'Pull-ups',            sets:'3 × 8'},
+      {name:'Barbell Row',         sets:'4 × 8'},
+      {name:'Cable Row',           sets:'3 × 10'},
+      {name:'Bicep Curls',         sets:'3 × 12'},
+      {name:'Hammer Curls',        sets:'3 × 12'},
+    ]},
+    { id:'tpl-legs', name:'Leg Day', type:'Legs', exercises:[
+      {name:'Squat',               sets:'4 × 6'},
+      {name:'Romanian Deadlift',   sets:'3 × 10'},
+      {name:'Leg Press',           sets:'3 × 12'},
+      {name:'Leg Curls',           sets:'3 × 12'},
+      {name:'Hip Thrusts',         sets:'3 × 15'},
+      {name:'Calf Raises',         sets:'4 × 15'},
+    ]},
+    { id:'tpl-cardio', name:'Cardio Day', type:'Cardio', exercises:[
+      {name:'Treadmill Run',       sets:'30 min'},
+      {name:'Stairmaster',         sets:'15 min'},
+      {name:'Jump Rope',           sets:'5 × 2 min'},
+    ]},
+    { id:'tpl-upper', name:'Upper Body', type:'Upper', exercises:[
+      {name:'Bench Press',         sets:'4 × 8'},
+      {name:'Barbell Row',         sets:'4 × 8'},
+      {name:'Overhead Press',      sets:'3 × 10'},
+      {name:'Pull-ups',            sets:'3 × 8'},
+      {name:'Dips',                sets:'3 × 12'},
+      {name:'Face Pulls',          sets:'3 × 15'},
+    ]},
+    { id:'tpl-lower', name:'Lower Body', type:'Lower', exercises:[
+      {name:'Squat',               sets:'4 × 6'},
+      {name:'Leg Press',           sets:'3 × 12'},
+      {name:'Lunges',              sets:'3 × 12 each'},
+      {name:'Hip Thrusts',         sets:'4 × 12'},
+      {name:'Leg Curls',           sets:'3 × 12'},
+      {name:'Calf Raises',         sets:'4 × 20'},
+    ]},
+  ];
+  save('workoutTemplates', workoutTemplates);
+}
 let _completedDays = {}; // {day: true} for this session
 
 function showRoutineView(view) {
