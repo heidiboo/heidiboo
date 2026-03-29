@@ -14,7 +14,7 @@
     --surface2: rgba(255,255,255,0.5);
     --ink: #1A1A1A;
     --ink2: #888880;
-    --ink3: rgba(0,0,0,0.25);
+    --ink3: rgba(0,0,0,0.38);
     --border: rgba(0,0,0,0.08);
     --border2: rgba(0,0,0,0.12);
     --header: #1A1A1A;
@@ -6891,7 +6891,7 @@ function renderSchedule() {
         const startM = schedToMins(b.time), endM = schedToMins(b.timeEnd);
         if (endM > startM) {
           const hrs = (endM - startM) / 60;
-          spanStyle = `min-height:${Math.max(hrs * 32 - 6, 32)}px;`;
+          spanStyle = `min-height:${Math.ceil(hrs) * 32}px;`;
         }
         spanClass = ' sblock-span';
         durLabel = `<span class="sblock-duration">${escHtml(b.time)} – ${escHtml(b.timeEnd)}</span>`;
@@ -6913,11 +6913,8 @@ function renderSchedule() {
     };
     const timelineHtml = SCHED_HOURS.map(h => {
       const items = (byHour[h]||[]).map(({b,bi})=>mkBlock(b,bi)).join('');
-      const slotContent = items
-        ? items
-        : spannedHours.has(h)
-          ? `<div class="sched-hour-cont"></div>`
-          : `<div class="sched-hour-empty" onclick="schedInlineAdd('${day}',${h})"></div>`;
+      if (!items && spannedHours.has(h)) return ''; // hide rows covered by spanning block
+      const slotContent = items || `<div class="sched-hour-empty" onclick="schedInlineAdd('${day}',${h})"></div>`;
       return `
       <div class="sched-hour-row" id="shr-${day}-${h}"
         ondragover="schedSlotDragOver(event,'${day}',${h})"
@@ -7006,7 +7003,7 @@ function renderSchedule() {
                   <button class="sched-ampm-btn" id="sadd-eampm-${day}" onclick="toggleEndAmPm('${day}')">AM</button>
                 </div>
                 <input class="sched-add-label" id="sadd-label-${day}" placeholder="Add block..."
-                  onkeydown="if(event.key==='Enter')addBlock('${day}')">
+                  onkeydown="if(event.key==='Enter'){event.preventDefault();addBlock('${day}')}">
                 <button class="sched-add-btn" onclick="addBlock('${day}')">Add</button>
               </div>
             </div>
@@ -7020,7 +7017,7 @@ function renderSchedule() {
       <div class="sday-add-workout-wrap" id="sday-wbtn-${day}">
         <button class="sday-add-workout-btn" onclick="toggleDayWorkoutPicker('${day}')">+</button>
         <div class="sday-workout-dropdown" id="sday-wdrop-${day}" style="display:none">
-          ${WORKOUT_TYPES.map(t=>`<button class="workout-type-btn" onclick="addWorkoutFromTemplate('${day}','${t}')">${t}</button>`).join('')}
+          ${[...new Set([...WORKOUT_TYPES,...customWorkoutTypes,...workoutTemplates.map(t=>t.name)])].map(t=>`<button class="workout-type-btn" onclick="addWorkoutFromTemplate('${day}','${t}')">${t}</button>`).join('')}
         </div>
       </div>` : '';
 
@@ -7100,7 +7097,7 @@ function renderSchedule() {
                 <button class="sched-ampm-btn" id="sadd-eampm-${day}" onclick="toggleEndAmPm('${day}')">AM</button>
               </div>
               <input class="sched-add-label" id="sadd-label-${day}" placeholder="Add block..."
-                onkeydown="if(event.key==='Enter')addBlock('${day}')">
+                onkeydown="if(event.key==='Enter'){event.preventDefault();addBlock('${day}')}">
               <button class="sched-add-btn" onclick="addBlock('${day}')">Add</button>
             </div>
           </div>
@@ -7288,6 +7285,7 @@ let _schedInlineSubmitted = false;
 function schedInlineKey(e, day, h) {
   if (e.key === 'Escape') { _schedInlineSubmitted = true; renderSchedule(); return; }
   if (e.key !== 'Enter') return;
+  e.preventDefault();
   const val = e.target.value.trim();
   if (!val) { _schedInlineSubmitted = true; renderSchedule(); return; }
   _schedInlineSubmitted = true;
