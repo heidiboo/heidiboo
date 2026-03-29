@@ -2863,7 +2863,7 @@ function gsRender(query) {
   // Group by type
   const groups = {};
   const groupOrder = ['doc','project','task','schedule','tab'];
-  const groupLabels = { doc:'Docs', project:'Projects', task:'Tasks', schedule:'Today's Schedule', tab:'Pages' };
+  const groupLabels = { doc:'Docs', project:'Projects', task:'Tasks', schedule:"Today's Schedule", tab:'Pages' };
   _gsResults.forEach(r => { if (!groups[r.type]) groups[r.type] = []; groups[r.type].push(r); });
 
   let flatIdx = 0;
