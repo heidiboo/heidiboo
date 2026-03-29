@@ -2042,6 +2042,22 @@ const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
 function saveLocal(key, val) { try { localStorage.setItem('dash_'+key, JSON.stringify(val)); } catch(e){} }
 function loadLocal(key, def) { try { return JSON.parse(localStorage.getItem('dash_'+key)) ?? def; } catch { return def; } }
 
+// One-time migration: copy old unprefixed keys → dash_ prefixed keys
+(function migrateLocalStorage() {
+  if (localStorage.getItem('dash_migrated_v1')) return;
+  const keys = ['docs','docFolders','trashedDocs','trashedFolders','lockedDocs','projects','taskDays',
+    'scheduleData','scheduleBaseline','scheduleHistory','schedLastWeek','workGoals','personalGoals',
+    'notes','todos','skills','cases','workoutTemplates','customWorkoutTypes','pomoSessions','pomoDate',
+    'anthropicKey','gsearchHistory'];
+  keys.forEach(k => {
+    const old = localStorage.getItem(k);
+    if (old !== null && localStorage.getItem('dash_'+k) === null) {
+      localStorage.setItem('dash_'+k, old);
+    }
+  });
+  localStorage.setItem('dash_migrated_v1', '1');
+})();
+
 // save() — writes to localStorage immediately, then syncs to Supabase in background
 function save(key, val) {
   saveLocal(key, val);
