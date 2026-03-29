@@ -1847,26 +1847,24 @@
   <button onclick="closeImgPicker()" style="position:absolute;top:12px;right:12px;background:none;border:none;font-size:16px;color:var(--ink2);cursor:pointer;padding:2px 6px;border-radius:4px" onmouseover="this.style.background='rgba(0,0,0,0.06)'" onmouseout="this.style.background='none'">✕</button>
 </div>
 
-<div id="folder-modal" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(26,23,20,0.4);align-items:center;justify-content:center">
-  <div style="background:var(--surface);border-radius:14px;padding:28px;width:360px;box-shadow:var(--shadow-lg)">
-    <div style="font-family:'Playfair Display',serif;font-size:1.2rem;font-weight:700;margin-bottom:20px">New Folder</div>
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
-      <!-- Icon button -->
-      <button id="folder-icon-btn" onclick="toggleEmojiPicker()" title="Choose icon"
-        style="width:48px;height:48px;border-radius:10px;border:2px solid var(--border);background:var(--surface2);font-size:1.5rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:border-color 0.15s"
-        onmouseover="this.style.borderColor='var(--ink)'" onmouseout="this.style.borderColor='var(--border)'">
-        <span id="folder-icon-display">📂</span>
-      </button>
-      <!-- Name input -->
+<div id="folder-modal" onclick="if(event.target===this)closeFolderModal()" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(26,23,20,0.4);align-items:center;justify-content:center">
+  <div style="background:var(--surface);border-radius:12px;padding:24px;width:320px;box-shadow:var(--shadow-lg)">
+    <div style="font-size:13px;font-weight:700;color:var(--ink);margin-bottom:16px;font-family:var(--mono);letter-spacing:0.04em;text-transform:uppercase">New Folder</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+      <!-- Inline emoji input — click and type any emoji -->
+      <input id="folder-icon-input" type="text" maxlength="2" value="📂"
+        style="width:44px;height:44px;border:1px solid var(--border);border-radius:8px;font-size:1.4rem;text-align:center;background:var(--surface2);outline:none;cursor:text;flex-shrink:0;padding:0"
+        onfocus="this.select()"
+        title="Click and type any emoji">
       <input type="text" id="folder-name-input" placeholder="Folder name..."
         onkeydown="if(event.key==='Enter')saveNewFolder()"
-        style="flex:1;padding:12px 14px;border:2px solid var(--border);border-radius:10px;font-family:'DM Sans',sans-serif;font-size:0.95rem;background:var(--bg);color:var(--ink);outline:none;transition:border-color 0.15s"
+        style="flex:1;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-family:var(--sans);font-size:13px;background:var(--bg);color:var(--ink);outline:none;transition:border-color 0.15s"
         onfocus="this.style.borderColor='var(--ink)'" onblur="this.style.borderColor='var(--border)'">
     </div>
-    <div id="folder-error" style="display:none;font-size:0.8rem;color:var(--accent);margin-bottom:12px">Please enter a folder name.</div>
+    <div id="folder-error" style="display:none;font-size:11px;color:var(--accent);margin-bottom:10px">Please enter a folder name.</div>
     <div style="display:flex;gap:8px;justify-content:flex-end">
-      <button onclick="closeFolderModal()" style="padding:8px 18px;border:1px solid var(--border);border-radius:8px;background:transparent;font-family:'DM Sans',sans-serif;font-size:0.875rem;cursor:pointer;color:var(--ink2)">Cancel</button>
-      <button onclick="saveNewFolder()" style="padding:8px 18px;border:none;border-radius:8px;background:var(--ink);color:white;font-family:'DM Sans',sans-serif;font-size:0.875rem;cursor:pointer;font-weight:500">Create</button>
+      <button onclick="closeFolderModal()" style="padding:7px 16px;border:1px solid var(--border);border-radius:6px;background:transparent;font-family:var(--sans);font-size:12px;cursor:pointer;color:var(--ink2)">Cancel</button>
+      <button onclick="saveNewFolder()" style="padding:7px 16px;border:none;border-radius:6px;background:var(--ink);color:#F9F7F3;font-family:var(--sans);font-size:12px;cursor:pointer;font-weight:500">Create</button>
     </div>
   </div>
 </div>
@@ -3275,12 +3273,9 @@ function pickEmoji(emoji) {
 }
 
 function promptNewFolder() {
-  selectedFolderIcon = '';
-  folderIconChosen = false;
   document.getElementById('folder-name-input').value = '';
-  document.getElementById('folder-icon-display').textContent = '📂';
+  document.getElementById('folder-icon-input').value = '📂';
   document.getElementById('folder-error').style.display = 'none';
-  document.getElementById('emoji-picker').style.display = 'none';
   document.getElementById('folder-modal').style.display = 'flex';
   setTimeout(() => document.getElementById('folder-name-input').focus(), 50);
 }
@@ -3297,7 +3292,7 @@ function saveNewFolder() {
     document.getElementById('folder-name-input').focus();
     return;
   }
-  const icon = selectedFolderIcon || '📂';
+  const icon = document.getElementById('folder-icon-input').value.trim() || '📂';
   docFolders.push({ id: 'folder_' + Date.now(), name, icon });
   save('docFolders', docFolders);
   renderFolders();
