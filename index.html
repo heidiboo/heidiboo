@@ -1083,18 +1083,18 @@
   .workout-complete-btn:hover { background: var(--ink); color: var(--bg); }
   /* Workout done / celebration card */
   .sched-workout-done-card {
-    display: flex; flex-direction: row; align-items: center;
-    gap: 12px; padding: 14px 16px; text-align: left;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; padding: 28px 20px; text-align: center;
     background: linear-gradient(135deg, #FFFBEB 0%, #FEF9F3 100%);
     border-color: #FDE68A !important;
   }
   .workout-done-sprite { flex-shrink: 0; }
-  .workout-done-text { flex: 1; min-width: 0; }
-  .workout-done-title { font-size: 12px; font-weight: 700; color: var(--ink); }
-  .workout-done-sub { font-size: 11px; color: var(--ink2); margin-top: 2px; }
+  .workout-done-text { }
+  .workout-done-title { font-size: 15px; font-weight: 700; color: var(--ink); }
+  .workout-done-sub { font-size: 12px; color: var(--ink2); margin-top: 4px; }
   .workout-undo-btn {
-    margin-top: 8px; background: none; border: 1px solid var(--border); border-radius: 4px;
-    font-size: 10px; color: var(--ink2); cursor: pointer; padding: 2px 8px;
+    display: block; margin-top: 14px; background: none; border: 1px solid var(--border);
+    border-radius: 5px; font-size: 10px; color: var(--ink2); cursor: pointer; padding: 4px 12px;
     font-family: var(--sans); transition: all 0.1s;
   }
   .workout-undo-btn:hover { border-color: var(--ink); color: var(--ink); }
@@ -1104,23 +1104,24 @@
   .wtpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
   .wtpl-card {
     background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-    padding: 16px 18px; position: relative; transition: border-color 0.15s;
+    padding: 16px 18px; transition: border-color 0.15s;
   }
   .wtpl-card:hover { border-color: var(--ink); }
   .wtpl-del {
-    position: absolute; top: 10px; right: 10px; background: none; border: none;
+    flex-shrink: 0; background: none; border: none;
     font-size: 12px; color: var(--ink2); cursor: pointer; padding: 3px 6px;
     border-radius: 4px; opacity: 0; transition: opacity 0.15s, color 0.1s;
   }
   .wtpl-card:hover .wtpl-del { opacity: 1; }
   .wtpl-del:hover { color: #E74C3C; }
-  .wtpl-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .wtpl-header { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; overflow: hidden; }
   .wtpl-name-input {
     flex: 1; border: none; outline: none; font-family: var(--mono); font-size: 13px;
     font-weight: 700; background: transparent; color: var(--ink); min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .wtpl-type-select {
-    font-size: 10px; padding: 2px 6px; border: 1px solid var(--border); border-radius: 10px;
+    flex-shrink: 0; font-size: 10px; padding: 2px 6px; border: 1px solid var(--border); border-radius: 10px;
     background: transparent; color: var(--ink2); font-family: var(--sans); cursor: pointer;
   }
   .wtpl-exercises { margin-bottom: 10px; }
@@ -1862,7 +1863,7 @@
         style="flex:1;padding:12px 14px;border:2px solid var(--border);border-radius:10px;font-family:'DM Sans',sans-serif;font-size:0.95rem;background:var(--bg);color:var(--ink);outline:none;transition:border-color 0.15s"
         onfocus="this.style.borderColor='var(--ink)'" onblur="this.style.borderColor='var(--border)'">
     </div>
-    <div id="folder-error" style="display:none;font-size:0.8rem;color:var(--accent);margin-bottom:12px">Please choose an icon and enter a folder name.</div>
+    <div id="folder-error" style="display:none;font-size:0.8rem;color:var(--accent);margin-bottom:12px">Please enter a folder name.</div>
     <div style="display:flex;gap:8px;justify-content:flex-end">
       <button onclick="closeFolderModal()" style="padding:8px 18px;border:1px solid var(--border);border-radius:8px;background:transparent;font-family:'DM Sans',sans-serif;font-size:0.875rem;cursor:pointer;color:var(--ink2)">Cancel</button>
       <button onclick="saveNewFolder()" style="padding:8px 18px;border:none;border-radius:8px;background:var(--ink);color:white;font-family:'DM Sans',sans-serif;font-size:0.875rem;cursor:pointer;font-weight:500">Create</button>
@@ -3291,12 +3292,13 @@ function closeFolderModal() {
 
 function saveNewFolder() {
   const name = document.getElementById('folder-name-input').value.trim();
-  if (!folderIconChosen || !name) {
+  if (!name) {
     document.getElementById('folder-error').style.display = 'block';
-    if (!name) document.getElementById('folder-name-input').focus();
+    document.getElementById('folder-name-input').focus();
     return;
   }
-  docFolders.push({ id: 'folder_' + Date.now(), name, icon: selectedFolderIcon });
+  const icon = selectedFolderIcon || '📂';
+  docFolders.push({ id: 'folder_' + Date.now(), name, icon });
   save('docFolders', docFolders);
   renderFolders();
   closeFolderModal();
@@ -5801,13 +5803,13 @@ function renderRoutineWorkouts() {
   if (!wrap) return;
   const cards = workoutTemplates.map((t, ti) => `
     <div class="wtpl-card" id="wtpl-card-${ti}">
-      <button class="wtpl-del" onclick="deleteWorkoutTemplate(${ti})" title="Delete">✕</button>
       <div class="wtpl-header">
         <input class="wtpl-name-input" value="${escHtml(t.name)}" placeholder="Workout name"
           onchange="workoutTemplates[${ti}].name=this.value;save('workoutTemplates',workoutTemplates)">
         <select class="wtpl-type-select" onchange="workoutTemplates[${ti}].type=this.value;save('workoutTemplates',workoutTemplates)">
           ${WORKOUT_TYPES.map(ty=>`<option value="${ty}"${t.type===ty?' selected':''}>${ty}</option>`).join('')}
         </select>
+        <button class="wtpl-del" onclick="deleteWorkoutTemplate(${ti})" title="Delete">✕</button>
       </div>
       <div class="wtpl-exercises">
         ${(t.exercises||[]).map((ex,ei)=>`
@@ -6498,7 +6500,7 @@ function renderSchedule() {
       const workoutHtml = `
         <div class="sched-workout-card sched-workout-done-card">
           <div class="workout-done-sprite">
-            <svg viewBox="0 0 80 80" width="52" height="52" xmlns="http://www.w3.org/2000/svg">
+            <svg viewBox="0 0 80 80" width="80" height="80" xmlns="http://www.w3.org/2000/svg">
               <!-- soot sprite holding dumbbell, static -->
               <ellipse cx="40" cy="72" rx="14" ry="3.5" fill="rgba(0,0,0,0.08)"/>
               <!-- body fuzz -->
