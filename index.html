@@ -385,6 +385,13 @@
   .proj-row-click { cursor: pointer; transition: background 0.12s; }
   .proj-row-click:hover td { background: rgba(0,0,0,0.02); }
   .proj-detail-header { display: flex; align-items: flex-start; gap: 24px; padding: 20px 0 24px; border-bottom: 1px solid var(--border); margin-bottom: 24px; flex-wrap: wrap; }
+  .proj-link-chip { display:flex; align-items:center; gap:4px; padding:6px 10px 6px 12px; border:1px solid var(--border); border-radius:20px; background:var(--surface); font-size:12px; font-weight:500; color:var(--ink); max-width:180px; transition:border-color 0.15s; }
+  .proj-link-chip.has-url { border-color: rgba(0,0,0,0.15); }
+  .proj-link-chip.has-url:hover { border-color: var(--ink); }
+  .proj-link-edit { background:none; border:none; cursor:pointer; font-size:11px; color:var(--ink3); padding:0 2px; opacity:0; transition:opacity 0.1s; flex-shrink:0; }
+  .proj-link-del  { background:none; border:none; cursor:pointer; font-size:13px; color:var(--ink3); padding:0 2px; opacity:0; transition:opacity 0.1s; flex-shrink:0; line-height:1; }
+  .proj-link-chip:hover .proj-link-edit,
+  .proj-link-chip:hover .proj-link-del { opacity:1; }
   .proj-detail-meta { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
   .proj-docs-picker-modal { position: fixed; inset: 0; z-index: 8000; background: rgba(0,0,0,0.25); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; }
   .proj-docs-picker-box { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); width: 520px; max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 8px 40px rgba(0,0,0,0.15); overflow: hidden; }
@@ -5858,16 +5865,47 @@ function closeProject() {
   document.getElementById('proj-detail-view').style.display = 'none';
 }
 
+const DEFAULT_PROJ_LINKS = [
+  { label:'Figma', icon:'🎨', url:'' },
+  { label:'Jira',  icon:'📋', url:'' },
+  { label:'PRD',   icon:'📄', url:'' },
+];
+
+function ensureProjLinks(p) {
+  if (!p.links) p.links = DEFAULT_PROJ_LINKS.map(l => ({...l}));
+  // Make sure default slots always exist
+  DEFAULT_PROJ_LINKS.forEach(def => {
+    if (!p.links.find(l => l.label === def.label)) p.links.unshift({...def});
+  });
+}
+
 function renderProjectDetail() {
   const i = _currentProjectIdx;
   if (i < 0 || i >= projects.length) { closeProject(); return; }
   const p = projects[i];
+  ensureProjLinks(p);
   const statusBadge = { Active:'badge-active', Review:'badge-review', Done:'badge-done', Paused:'badge-paused' };
   const sizeBadge = { Small:'badge-sm', Medium:'badge-md', Large:'badge-lg' };
   const sc = statusBadge[p.status] || 'badge-active';
   const zc = sizeBadge[p.size] || 'badge-sm';
   const projDocs = docs.filter(d => d.project === p.name);
   const el = document.getElementById('proj-detail-content');
+
+  const linkChips = p.links.map((l, li) => {
+    const hasUrl = l.url && l.url.trim();
+    return `<div class="proj-link-chip${hasUrl ? ' has-url' : ''}" title="${hasUrl ? l.url : 'Click to add URL'}">
+      ${hasUrl
+        ? `<a href="${escHtml(l.url)}" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:5px;color:inherit;text-decoration:none;flex:1;min-width:0">
+             <span>${l.icon}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(l.label)}</span>
+           </a>`
+        : `<span onclick="editProjLink(${i},${li})" style="display:flex;align-items:center;gap:5px;cursor:pointer;flex:1;min-width:0;opacity:0.5">
+             <span>${l.icon}</span><span>${escHtml(l.label)}</span>
+           </span>`}
+      <button onclick="editProjLink(${i},${li})" class="proj-link-edit" title="Edit">✎</button>
+      ${li >= DEFAULT_PROJ_LINKS.length ? `<button onclick="removeProjLink(${i},${li})" class="proj-link-del" title="Remove">×</button>` : ''}
+    </div>`;
+  }).join('');
+
   el.innerHTML = `
     <div class="proj-detail-header">
       <div style="flex:1;min-width:220px">
@@ -5886,6 +5924,17 @@ function renderProjectDetail() {
         <div style="font-size:11px;color:var(--ink2)">${p.progress}%</div>
       </div>
     </div>
+
+    <!-- Quick Links -->
+    <div style="margin-bottom:28px">
+      <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.1em;color:var(--ink2);text-transform:uppercase;margin-bottom:10px">Quick Links</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+        ${linkChips}
+        <button onclick="addProjLink(${i})" style="display:flex;align-items:center;gap:5px;padding:6px 12px;border:1px dashed var(--border);border-radius:20px;background:transparent;cursor:pointer;font-size:12px;color:var(--ink2);font-family:var(--sans)">+ Add</button>
+      </div>
+    </div>
+
+    <!-- Docs -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
       <div style="font-family:var(--mono);font-size:11px;letter-spacing:0.08em;color:var(--ink2);text-transform:uppercase">Docs // ${projDocs.length}</div>
       <button class="btn btn-primary" onclick="openProjectDocsPicker(${i})" style="font-size:12px;padding:6px 14px">+ Link Docs</button>
@@ -5898,6 +5947,39 @@ function renderProjectDetail() {
       </div>`).join('')}</div>`
     : `<div class="empty-state">No docs linked yet — click Link Docs to attach existing docs or create a new one</div>`}
   `;
+}
+
+function editProjLink(pi, li) {
+  const p = projects[pi];
+  if (!p) return;
+  const l = p.links[li];
+  const url = prompt(`URL for ${l.label}:`, l.url || '');
+  if (url === null) return; // cancelled
+  l.url = url.trim();
+  save('projects', projects);
+  renderProjectDetail();
+}
+
+function addProjLink(pi) {
+  const p = projects[pi];
+  if (!p) return;
+  const label = prompt('Link label (e.g. Notion, Slack, Drive):');
+  if (!label?.trim()) return;
+  const url = prompt(`URL for ${label.trim()}:`, 'https://');
+  if (!url?.trim()) return;
+  const icons = { notion:'📝', slack:'💬', drive:'📁', github:'🐙', confluence:'📘', linear:'🔷', loom:'🎥', miro:'🟡' };
+  const icon = icons[label.toLowerCase()] || '🔗';
+  p.links.push({ label: label.trim(), icon, url: url.trim() });
+  save('projects', projects);
+  renderProjectDetail();
+}
+
+function removeProjLink(pi, li) {
+  const p = projects[pi];
+  if (!p) return;
+  p.links.splice(li, 1);
+  save('projects', projects);
+  renderProjectDetail();
 }
 
 // ── DOCS PICKER ──
