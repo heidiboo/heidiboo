@@ -3250,15 +3250,15 @@ function updateProject(i, field, value) {
   if (!projects[i]) return;
   projects[i][field] = value;
   save('projects', projects);
-  // re-colour the select without full re-render
   const statusBadge = { Active:'badge-active', Review:'badge-review', Done:'badge-done', Paused:'badge-paused' };
   const sizeBadge = { Small:'badge-sm', Medium:'badge-md', Large:'badge-lg' };
-  if (field === 'status' || field === 'size') {
+  if ((field === 'status' || field === 'size') && typeof event !== 'undefined' && event?.target?.tagName === 'SELECT') {
     const map = field === 'status' ? statusBadge : sizeBadge;
-    const sel = event.target;
-    sel.className = 'badge-select ' + (map[value] || '');
+    event.target.className = 'badge-select ' + (map[value] || '');
   }
   renderOverview();
+  // refresh table if visible
+  if (document.getElementById('proj-list-view')?.style.display !== 'none') renderProjects();
 }
 
 function deleteProject(i) {
@@ -6045,7 +6045,7 @@ function renderProjectDetail() {
               style="flex:1;padding:3px 6px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:var(--sans);background:var(--bg);color:var(--ink);outline:none">
           </div>
           ${p.due ? (() => {
-            const days = Math.ceil((new Date(p.due) - new Date()) / 86400000);
+            const days = Math.ceil((new Date(p.due + 'T12:00:00') - new Date()) / 86400000);
             const color = days < 0 ? 'var(--accent)' : days <= 7 ? '#B45309' : 'var(--ink2)';
             const label = days < 0 ? `${Math.abs(days)}d overdue` : days === 0 ? 'Due today' : `${days}d left`;
             return `<div style="font-size:11px;font-weight:600;color:${color};text-align:right;margin-top:2px">${label}</div>`;
