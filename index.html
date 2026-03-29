@@ -255,6 +255,21 @@
   .w-btn.primary:hover { opacity: 0.85; }
   .w-btn.secondary { background: transparent; border: 1px solid var(--border2); color: var(--ink); }
   .w-btn.secondary:hover { background: rgba(0,0,0,0.05); }
+  .search-trigger-btn { display:flex; align-items:center; gap:6px; background:transparent; border:1px solid var(--border2); color:var(--ink2); }
+  .search-trigger-btn:hover { background:rgba(0,0,0,0.04); color:var(--ink); border-color:var(--ink); }
+  /* Global search results */
+  .gsearch-group-label { font-family:var(--mono); font-size:9px; letter-spacing:0.1em; text-transform:uppercase; color:var(--ink3); padding:10px 28px 4px; }
+  .gsearch-result {
+    display:flex; align-items:center; gap:12px; padding:9px 28px;
+    cursor:pointer; transition:background 0.1s;
+  }
+  .gsearch-result:hover, .gsearch-result.gs-active { background:rgba(0,0,0,0.04); }
+  .gsearch-result-icon { width:30px; height:30px; border-radius:6px; background:rgba(0,0,0,0.05); display:flex; align-items:center; justify-content:center; font-size:13px; flex-shrink:0; }
+  .gsearch-result-title { font-size:13px; font-weight:500; color:var(--ink); }
+  .gsearch-result-sub { font-size:11px; color:var(--ink2); margin-top:1px; }
+  .gsearch-result-tag { font-size:9px; padding:2px 6px; border-radius:8px; background:rgba(0,0,0,0.06); color:var(--ink2); margin-left:auto; flex-shrink:0; }
+  .gsearch-empty { padding:32px 28px; font-size:13px; color:var(--ink2); text-align:center; }
+  mark.gs-hl { background:rgba(255,200,50,0.4); border-radius:2px; padding:0 1px; }
 
   /* Main content area */
   .main { padding: 24px 32px; max-width: 1400px; margin: 0 auto; }
@@ -1486,6 +1501,10 @@
           </div>
           <div class="work-actions">
             <button class="w-btn secondary" onclick="openDoc(null)">New Doc</button>
+            <button class="w-btn search-trigger-btn" onclick="openGlobalSearch()" title="Search everywhere (⌘K)">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="6" cy="6" r="4.5"/><line x1="9.5" y1="9.5" x2="13" y2="13"/></svg>
+              Search
+            </button>
           </div>
         </div>
       </div>
@@ -1681,6 +1700,22 @@
 
   </main>
 </div><!-- /work-app -->
+
+<!-- GLOBAL SEARCH OVERLAY -->
+<div id="gsearch-overlay" onclick="if(event.target===this)closeGlobalSearch()" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.25);backdrop-filter:blur(4px)">
+  <div id="gsearch-box" style="position:absolute;top:0;left:0;right:0;background:var(--surface);border-bottom:1px solid var(--border);padding:0;box-shadow:0 8px 40px rgba(0,0,0,0.15)">
+    <div style="display:flex;align-items:center;gap:10px;padding:14px 28px;border-bottom:1px solid rgba(0,0,0,0.06)">
+      <svg width="16" height="16" viewBox="0 0 14 14" fill="none" stroke="var(--ink2)" stroke-width="1.8" stroke-linecap="round" style="flex-shrink:0"><circle cx="6" cy="6" r="4.5"/><line x1="9.5" y1="9.5" x2="13" y2="13"/></svg>
+      <input id="gsearch-input" type="text" placeholder="Search docs, projects, tasks, schedule…"
+        oninput="gsearchQuery(this.value)"
+        onkeydown="gsearchKey(event)"
+        style="flex:1;border:none;outline:none;font-size:16px;background:transparent;font-family:var(--sans);color:var(--ink)">
+      <span style="font-size:10px;color:var(--ink3);font-family:var(--mono);background:rgba(0,0,0,0.06);padding:2px 6px;border-radius:4px">ESC</span>
+    </div>
+    <div id="gsearch-results" style="max-height:min(440px,60vh);overflow-y:auto;padding:6px 0"></div>
+    <div id="gsearch-footer" style="padding:8px 28px;font-size:10px;color:var(--ink3);font-family:var(--mono);border-top:1px solid rgba(0,0,0,0.05)">↑↓ navigate · ↵ open · ESC close</div>
+  </div>
+</div>
 
 <!-- SAVE SPRITE CANVAS OVERLAY -->
 <canvas id="sched-save-canvas" style="position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:9999;display:none"></canvas>
@@ -2684,7 +2719,8 @@ function renderOverview() {
   }
   const od = document.getElementById('overview-docs');
   if (od) {
-    const recent = docs.slice(-7).reverse();
+    const tsOf = d => d.updatedTs || new Date(d.updatedAt || d.createdAt || 0).getTime() || 0;
+    const recent = [...docs].sort((a,b) => tsOf(b)-tsOf(a)).slice(0, 7);
     if (!recent.length) { od.innerHTML = '<div class="empty-state">No docs yet</div>'; }
     else od.innerHTML = recent.map(d => `
       <div style="padding:8px 0;border-bottom:1px solid rgba(0,0,0,0.05);cursor:pointer" onclick="openDoc('${d.id}')">
@@ -2694,6 +2730,156 @@ function renderOverview() {
     `).join('');
   }
 }
+
+// ── GLOBAL SEARCH ──
+let _gsActive = 0;
+let _gsResults = [];
+
+function openGlobalSearch() {
+  const overlay = document.getElementById('gsearch-overlay');
+  overlay.style.display = 'block';
+  const input = document.getElementById('gsearch-input');
+  input.value = '';
+  gsearchQuery('');
+  setTimeout(() => input.focus(), 40);
+}
+
+function closeGlobalSearch() {
+  document.getElementById('gsearch-overlay').style.display = 'none';
+  _gsResults = [];
+  _gsActive = 0;
+}
+
+function gsearchKey(e) {
+  if (e.key === 'Escape') { closeGlobalSearch(); return; }
+  if (e.key === 'ArrowDown') { e.preventDefault(); _gsActive = Math.min(_gsActive + 1, _gsResults.length - 1); gsRenderHighlight(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); _gsActive = Math.max(_gsActive - 1, 0); gsRenderHighlight(); }
+  else if (e.key === 'Enter') { e.preventDefault(); if (_gsResults[_gsActive]) gsOpen(_gsResults[_gsActive]); }
+}
+
+function gsRenderHighlight() {
+  document.querySelectorAll('.gsearch-result').forEach((el, i) => el.classList.toggle('gs-active', i === _gsActive));
+  const active = document.querySelector('.gsearch-result.gs-active');
+  if (active) active.scrollIntoView({ block: 'nearest' });
+}
+
+function gsHL(text, query) {
+  if (!query) return escHtml(text);
+  const escaped = escHtml(text);
+  const eq = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return escaped.replace(new RegExp(eq, 'gi'), m => `<mark class="gs-hl">${m}</mark>`);
+}
+
+function gsearchQuery(q) {
+  const query = q.trim().toLowerCase();
+  const results = [];
+
+  // ── Docs ──
+  const docHits = docs
+    .filter(d => {
+      if (!query) return true;
+      const t = (d.title || '').toLowerCase();
+      const b = (d.body || '').replace(/<[^>]*>/g,'').toLowerCase();
+      return t.includes(query) || b.includes(query);
+    })
+    .sort((a,b) => (b.updatedTs||0)-(a.updatedTs||0))
+    .slice(0, query ? 6 : 4);
+  docHits.forEach(d => {
+    const preview = (d.body||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+    // find snippet around match
+    let sub = d.updatedAt || '';
+    if (query) {
+      const idx = preview.toLowerCase().indexOf(query);
+      if (idx >= 0) sub = '…' + preview.slice(Math.max(0,idx-30), idx+60).trim() + '…';
+    }
+    results.push({ type:'doc', icon:'📄', title: d.title||'Untitled', sub, tag:'Doc', action:()=>{ closeGlobalSearch(); switchTab('docs'); openDoc(d.id); }, raw: d });
+  });
+
+  // ── Projects ──
+  const projHits = projects.filter(p => !query || p.name.toLowerCase().includes(query) || (p.desc||'').toLowerCase().includes(query)).slice(0,3);
+  projHits.forEach(p => results.push({ type:'project', icon:'📁', title: p.name, sub: p.status + (p.desc ? ' · ' + p.desc.slice(0,50) : ''), tag:'Project', action:()=>{ closeGlobalSearch(); switchTab('projects'); } }));
+
+  // ── Tasks ──
+  const todayCard = getTodayCard?.();
+  if (todayCard) {
+    const taskHits = (todayCard.tasks||[]).filter(t => !query || t.text.toLowerCase().includes(query)).slice(0,3);
+    taskHits.forEach(t => results.push({ type:'task', icon: t.done?'✅':'☐', title: t.text, sub: t.done ? 'Completed' : 'Pending', tag:'Task', action:()=>{ closeGlobalSearch(); switchTab('overview'); } }));
+  }
+
+  // ── Schedule ──
+  const todayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
+  const dayData = scheduleData?.[todayName];
+  if (dayData) {
+    (dayData.blocks||[]).filter(b => !query || b.label.toLowerCase().includes(query)).slice(0,3).forEach(b =>
+      results.push({ type:'schedule', icon:'🕐', title: b.label, sub: b.time + (b.timeEnd?' – '+b.timeEnd:''), tag:'Schedule', action:()=>{ closeGlobalSearch(); switchTab('schedule'); } })
+    );
+  }
+
+  // ── Tabs / pages (always show as suggestions) ──
+  const tabSuggestions = [
+    { label:'Overview', tab:'overview', icon:'🏠' },
+    { label:'Projects', tab:'projects', icon:'📁' },
+    { label:'Docs', tab:'docs', icon:'📝' },
+    { label:'Schedule', tab:'schedule', icon:'📅' },
+    { label:'Focus', tab:'focus', icon:'⏱' },
+  ];
+  tabSuggestions.filter(t => !query || t.label.toLowerCase().includes(query)).forEach(t =>
+    results.push({ type:'tab', icon:t.icon, title:'Go to ' + t.label, sub:'', tag:'Page', action:()=>{ closeGlobalSearch(); switchTab(t.tab); } })
+  );
+
+  _gsResults = results;
+  _gsActive = 0;
+  gsRender(query);
+}
+
+function gsRender(query) {
+  const el = document.getElementById('gsearch-results');
+  if (!el) return;
+  if (!_gsResults.length) {
+    el.innerHTML = `<div class="gsearch-empty">No results${query ? ' for "' + escHtml(query) + '"' : ''}</div>`;
+    return;
+  }
+  // Group by type
+  const groups = {};
+  const groupOrder = ['doc','project','task','schedule','tab'];
+  const groupLabels = { doc:'Docs', project:'Projects', task:'Tasks', schedule:'Today's Schedule', tab:'Pages' };
+  _gsResults.forEach(r => { if (!groups[r.type]) groups[r.type] = []; groups[r.type].push(r); });
+
+  let flatIdx = 0;
+  let html = '';
+  groupOrder.forEach(type => {
+    if (!groups[type]?.length) return;
+    html += `<div class="gsearch-group-label">${groupLabels[type]}</div>`;
+    groups[type].forEach(r => {
+      const titleHtml = gsHL(r.title, query);
+      const subHtml = r.sub ? gsHL(r.sub.slice(0,80), query) : '';
+      const idx = _gsResults.indexOf(r);
+      html += `<div class="gsearch-result${idx === 0 ? ' gs-active' : ''}" data-idx="${idx}" onmouseenter="_gsActive=${idx};gsRenderHighlight()" onmousedown="event.preventDefault();gsOpen(_gsResults[${idx}])">
+        <div class="gsearch-result-icon">${r.icon}</div>
+        <div style="flex:1;min-width:0">
+          <div class="gsearch-result-title">${titleHtml}</div>
+          ${subHtml ? `<div class="gsearch-result-sub">${subHtml}</div>` : ''}
+        </div>
+        <div class="gsearch-result-tag">${r.tag}</div>
+      </div>`;
+    });
+  });
+  el.innerHTML = html;
+}
+
+function gsOpen(result) {
+  if (result?.action) result.action();
+}
+
+// ⌘K / Ctrl+K global shortcut
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+    e.preventDefault();
+    const overlay = document.getElementById('gsearch-overlay');
+    if (overlay?.style.display === 'none' || !overlay?.style.display) openGlobalSearch();
+    else closeGlobalSearch();
+  }
+});
 
 function getTodayCard() {
   const today = todayKey();
@@ -3338,7 +3524,8 @@ function renderDocs(filterProject) {
   } else if (currentFolder !== 'all') {
     list = docs.filter(d => d.folder === currentFolder);
   }
-  list = [...list].sort((a, b) => (b.updatedTs || 0) - (a.updatedTs || 0));
+  const tsOf = d => d.updatedTs || new Date(d.updatedAt || d.createdAt || 0).getTime() || 0;
+  list = [...list].sort((a, b) => tsOf(b) - tsOf(a));
   if (!list.length) {
     el.innerHTML = `<div class="empty-state" style="grid-column:1/-1">${filterProject ? 'No docs for this project yet' : 'No docs here yet'}</div>`;
     return;
