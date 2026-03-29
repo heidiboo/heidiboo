@@ -18,7 +18,7 @@
     --border: rgba(0,0,0,0.08);
     --border2: rgba(0,0,0,0.12);
     --header: #1A1A1A;
-    --shadow: 0 1px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
+    --shadow: 0 1px 3px rgba(0,0,0,0.04), 0 2px 8px rgba(0,0,0,0.03);
     --shadow-lg: 0 8px 32px rgba(0,0,0,0.08);
     --radius: 10px;
     --radius-sm: 6px;
@@ -2534,8 +2534,9 @@ function showLoginScreen(errorMsg) {
 async function showApp() {
   if (window._stopLoginSprite) window._stopLoginSprite();
   document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('work-app').style.display = 'block';
   showSyncStatus('Syncing...');
-  await loadFromSupabase();
+  try { await loadFromSupabase(); } catch(e) { console.warn('Supabase load failed, using local data:', e); }
   hideSyncStatus();
   init();
 
