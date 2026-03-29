@@ -1588,7 +1588,6 @@
                 <th>Phase</th>
                 <th>Progress</th>
                 <th>Due</th>
-                <th>Docs</th>
                 <th></th>
               </tr>
             </thead>
@@ -2718,7 +2717,6 @@ function renderProjects() {
   const statusBadge = { Active:'badge-active', Review:'badge-review', Done:'badge-done', Paused:'badge-paused' };
   const sizeBadge = { Small:'badge-sm', Medium:'badge-md', Large:'badge-lg' };
   tbody.innerHTML = projects.map((p, i) => {
-    const docCount = docs.filter(d => d.project === p.name || (d.projectId === p.id)).length;
     const sc = statusBadge[p.status] || 'badge-active';
     const zc = sizeBadge[p.size] || 'badge-sm';
     return `<tr class="proj-row-click" onclick="openProject(${i})">
@@ -2728,7 +2726,6 @@ function renderProjects() {
       <td style="color:var(--ink2);font-size:11px">${p.phase}</td>
       <td><div class="progress-bar"><div class="progress-fill" style="width:${p.progress}%"></div></div><small style="color:var(--ink2);font-size:11px">${p.progress}%</small></td>
       <td style="color:var(--ink2);font-size:11px">${p.due || '—'}</td>
-      <td onclick="event.stopPropagation();openProjectDocsPicker(${i})"><button class="btn" style="font-size:11px;padding:3px 10px;background:var(--surface2);border:1px solid var(--border);color:var(--ink2)">📄 ${docCount} doc${docCount !== 1 ? 's' : ''}</button></td>
       <td onclick="event.stopPropagation()"><button class="btn btn-danger" onclick="deleteProject(${i})">✕</button></td>
     </tr>`;
   }).join('');
