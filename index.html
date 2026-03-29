@@ -385,6 +385,16 @@
   .proj-row-click { cursor: pointer; transition: background 0.12s; }
   .proj-row-click:hover td { background: rgba(0,0,0,0.02); }
   .proj-detail-header { display: flex; align-items: flex-start; gap: 24px; padding: 20px 0 24px; border-bottom: 1px solid var(--border); margin-bottom: 24px; flex-wrap: wrap; }
+  .reminders-overlay { position:fixed;inset:0;z-index:8500;background:rgba(0,0,0,0.3);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:24px; }
+  .reminders-modal { background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);width:100%;max-width:900px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 12px 48px rgba(0,0,0,0.18);overflow:hidden; }
+  .reminders-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;overflow-y:auto;flex:1;padding:20px; }
+  .reminder-card { background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;display:flex;flex-direction:column;gap:10px; }
+  .reminder-card-title { font-size:15px;font-weight:700;font-family:var(--mono);outline:none;border:none;background:transparent;color:var(--ink);width:100%;padding:0; }
+  .reminder-card-sub { font-size:12px;color:var(--ink2);font-style:italic;outline:none;background:transparent;border:none;width:100%;padding:0; }
+  .reminder-item-row { display:flex;align-items:flex-start;gap:8px;padding:3px 0; }
+  .reminder-item-text { flex:1;font-size:13px;line-height:1.55;outline:none;background:transparent;border:none;color:var(--ink);resize:none;font-family:var(--sans);padding:0;min-height:1.4em; }
+  .reminder-item-del { background:none;border:none;cursor:pointer;color:var(--ink3);font-size:14px;opacity:0;transition:opacity 0.1s;flex-shrink:0;padding:0;line-height:1;margin-top:2px; }
+  .reminder-item-row:hover .reminder-item-del { opacity:0.6; }
   .proj-link-chip { display:flex; align-items:center; gap:4px; padding:6px 10px 6px 12px; border:1px solid var(--border); border-radius:20px; background:var(--surface); font-size:12px; font-weight:500; color:var(--ink); max-width:180px; transition:border-color 0.15s; }
   .proj-link-chip.has-url { border-color: rgba(0,0,0,0.15); }
   .proj-link-chip.has-url:hover { border-color: var(--ink); }
@@ -1642,9 +1652,28 @@
       <!-- DETAIL VIEW -->
       <div id="proj-detail-view" style="display:none">
         <div class="section-header" style="padding-bottom:16px">
+          <div style="display:flex;gap:8px;align-items:center">
           <button class="btn" onclick="closeProject()" style="font-size:12px;padding:5px 12px;border:1px solid var(--border);background:transparent;color:var(--ink2)">← Projects</button>
+          <button class="btn" onclick="openReminders()" style="font-size:12px;padding:5px 12px;border:1px solid var(--border);background:transparent;color:var(--ink2)">📌 Reminders</button>
+        </div>
         </div>
         <div id="proj-detail-content"></div>
+      </div>
+    </div>
+    <!-- REMINDERS MODAL -->
+    <div id="reminders-overlay" class="reminders-overlay" style="display:none" onclick="if(event.target===this)closeReminders()">
+      <div class="reminders-modal">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);flex-shrink:0">
+          <div>
+            <div style="font-size:14px;font-weight:700;font-family:var(--mono)">Project Reminders</div>
+            <div style="font-size:11px;color:var(--ink2);margin-top:2px">Shared across all projects — stay accountable</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button onclick="addReminderCard()" style="font-size:12px;padding:5px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:transparent;cursor:pointer;font-family:var(--sans);color:var(--ink2)">+ Card</button>
+            <button onclick="closeReminders()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--ink2);line-height:1">×</button>
+          </div>
+        </div>
+        <div class="reminders-grid" id="reminders-grid"></div>
       </div>
     </div>
     <!-- DOCS PICKER MODAL -->
@@ -2665,7 +2694,7 @@ function hideSyncStatus() {
 }
 
 // ---- STATE ----
-let projects = [], workGoals = [], personalGoals = [], cases = [], skills = [], notes = [], todos = [], docs = [], taskDays = [], docFolders = [], trashedDocs = [], lockedDocs = [], trashedFolders = [], trashedProjects = [];
+let projects = [], workGoals = [], personalGoals = [], cases = [], skills = [], notes = [], todos = [], docs = [], taskDays = [], docFolders = [], trashedDocs = [], lockedDocs = [], trashedFolders = [], trashedProjects = [], globalReminders = [];
 let currentDocId = null;
 let currentProjectFilter = null;
 
@@ -2699,6 +2728,49 @@ function loadAll() {
   save('trashedDocs', trashedDocs);
   trashedProjects = trashedProjects.filter(p => p.trashedAt > cutoff);
   save('trashedProjects', trashedProjects);
+  // Load global reminders, seed defaults if empty
+  globalReminders = load('globalReminders', []);
+  if (!globalReminders.length) {
+    globalReminders = [
+      {
+        id: 'rem_1', title: 'Self-Checking Responsibilities',
+        subtitle: 'What can I do to stay proactive?',
+        items: [
+          'Understand the PRD thoroughly — call out concerns or opportunities early',
+          'Iterate fast on follow items (same day, 3–4 iterations with pros/cons for each)',
+          'Prepare file for handoff: specs, edge cases, redlines clean',
+          'Finalize with CD/VD partners ahead of time, not last minute',
+          'Set agenda for next review — questions prepped, not reactive',
+          'Feasibility check with Eng lead before locking designs',
+          'Am I solving the right problem or just executing a request?',
+        ]
+      },
+      {
+        id: 'rem_2', title: 'Handoff Readiness',
+        subtitle: 'Is this actually ready to ship?',
+        items: [
+          'Final flows + screens linked and organized in Figma',
+          'Component + design system notes documented',
+          'Interaction notes + states covered (hover, error, empty, loading)',
+          'Edge cases + a11y notes included',
+          'TBD / open questions explicitly listed — nothing left implicit',
+          'Mobile + responsive states accounted for',
+        ]
+      },
+      {
+        id: 'rem_3', title: 'Alignment Check',
+        subtitle: 'Are we all on the same page?',
+        items: [
+          'Stakeholder sign-off received before moving to next phase',
+          'Success metrics defined and agreed on',
+          'Engineering aware of complexity + timeline implications',
+          'Any scope changes communicated to PM immediately',
+          'Legal / brand / accessibility requirements checked',
+        ]
+      }
+    ];
+    save('globalReminders', globalReminders);
+  }
   // Seed Templates folder if it doesn't exist
   if (!docFolders.find(f => f.id === 'folder_templates')) {
     docFolders.push({ id: 'folder_templates', name: 'Templates', icon: '📋' });
@@ -5980,6 +6052,81 @@ function removeProjLink(pi, li) {
   p.links.splice(li, 1);
   save('projects', projects);
   renderProjectDetail();
+}
+
+// ── GLOBAL REMINDERS ──
+function openReminders() {
+  document.getElementById('reminders-overlay').style.display = 'flex';
+  renderRemindersGrid();
+}
+function closeReminders() {
+  document.getElementById('reminders-overlay').style.display = 'none';
+}
+function saveReminders() {
+  save('globalReminders', globalReminders);
+}
+function renderRemindersGrid() {
+  const el = document.getElementById('reminders-grid');
+  if (!el) return;
+  el.innerHTML = globalReminders.map((card, ci) => `
+    <div class="reminder-card">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+        <textarea class="reminder-card-title" rows="1" oninput="autoResizeTA(this);updateReminderField(${ci},'title',this.value)">${escHtml(card.title)}</textarea>
+        <button onclick="deleteReminderCard(${ci})" style="background:none;border:none;cursor:pointer;color:var(--ink3);font-size:16px;flex-shrink:0;opacity:0.4;padding:0;line-height:1" title="Delete card">×</button>
+      </div>
+      <textarea class="reminder-card-sub" rows="1" placeholder="Subtitle…" oninput="autoResizeTA(this);updateReminderField(${ci},'subtitle',this.value)">${escHtml(card.subtitle||'')}</textarea>
+      <div id="rem-items-${ci}">
+        ${card.items.map((item, ii) => `
+          <div class="reminder-item-row">
+            <span style="color:var(--ink3);font-size:11px;margin-top:3px;flex-shrink:0">•</span>
+            <textarea class="reminder-item-text" rows="1" oninput="autoResizeTA(this);updateReminderItem(${ci},${ii},this.value)" onkeydown="reminderItemKey(event,${ci},${ii})">${escHtml(item)}</textarea>
+            <button class="reminder-item-del" onclick="deleteReminderItem(${ci},${ii})">×</button>
+          </div>`).join('')}
+      </div>
+      <button onclick="addReminderItem(${ci})" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--ink3);font-family:var(--sans);padding:4px 0;text-align:left">+ Add item</button>
+    </div>
+  `).join('');
+  // Auto-resize all textareas
+  el.querySelectorAll('textarea').forEach(autoResizeTA);
+}
+function autoResizeTA(ta) {
+  ta.style.height = 'auto';
+  ta.style.height = ta.scrollHeight + 'px';
+}
+function updateReminderField(ci, field, val) {
+  if (globalReminders[ci]) { globalReminders[ci][field] = val; saveReminders(); }
+}
+function updateReminderItem(ci, ii, val) {
+  if (globalReminders[ci]?.items[ii] !== undefined) { globalReminders[ci].items[ii] = val; saveReminders(); }
+}
+function addReminderItem(ci) {
+  if (!globalReminders[ci]) return;
+  globalReminders[ci].items.push('');
+  saveReminders();
+  renderRemindersGrid();
+  // focus last item
+  const rows = document.querySelectorAll(`#rem-items-${ci} .reminder-item-text`);
+  if (rows.length) rows[rows.length-1].focus();
+}
+function deleteReminderItem(ci, ii) {
+  globalReminders[ci]?.items.splice(ii, 1);
+  saveReminders();
+  renderRemindersGrid();
+}
+function reminderItemKey(e, ci, ii) {
+  if (e.key === 'Enter') { e.preventDefault(); addReminderItem(ci); }
+  if (e.key === 'Backspace' && e.target.value === '') { e.preventDefault(); deleteReminderItem(ci, ii); }
+}
+function addReminderCard() {
+  globalReminders.push({ id: 'rem_' + Date.now(), title: 'New Reminder', subtitle: '', items: [''] });
+  saveReminders();
+  renderRemindersGrid();
+}
+function deleteReminderCard(ci) {
+  if (!confirm('Delete this reminder card?')) return;
+  globalReminders.splice(ci, 1);
+  saveReminders();
+  renderRemindersGrid();
 }
 
 // ── DOCS PICKER ──
