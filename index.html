@@ -378,6 +378,7 @@
   .badge-sm { background: #EFF6FF; color: #1D4ED8; }
   .badge-md { background: #FAF5FF; color: #7C3AED; }
   .badge-lg { background: #FFF7ED; color: #C2410C; }
+  .folder-drag-over { background: rgba(0,0,0,0.05) !important; border-radius: var(--radius-sm); }
   .proj-row-click { cursor: pointer; transition: background 0.12s; }
   .proj-row-click:hover td { background: rgba(0,0,0,0.02); }
   .proj-detail-header { display: flex; align-items: flex-start; gap: 24px; padding: 20px 0 24px; border-bottom: 1px solid var(--border); margin-bottom: 24px; flex-wrap: wrap; }
@@ -3552,11 +3553,44 @@ function renderFolders() {
   const el = document.getElementById('folder-list');
   if (!el) return;
   el.innerHTML = docFolders.map(f => `
-    <div class="docs-folder-item ${currentFolder === f.id ? 'active' : ''}" id="folder-${f.id}" onclick="selectFolder('${f.id}')">
+    <div class="docs-folder-item ${currentFolder === f.id ? 'active' : ''}" id="folder-${f.id}"
+      draggable="true"
+      ondragstart="folderDragStart(event,'${f.id}')"
+      ondragover="folderDragOver(event)"
+      ondragenter="folderDragEnter(event)"
+      ondragleave="folderDragLeave(event)"
+      ondrop="folderDrop(event,'${f.id}')"
+      ondragend="folderDragEnd(event)"
+      onclick="selectFolder('${f.id}')">
+      <span style="cursor:grab;opacity:0.3;font-size:10px;margin-right:2px">⠿</span>
       <span>${f.icon || '📂'}</span><span style="flex:1">${f.name}</span>
       <button class="docs-folder-delete" onclick="event.stopPropagation();deleteFolder('${f.id}')" title="Delete folder">✕</button>
     </div>
   `).join('');
+}
+
+let _folderDragId = null;
+function folderDragStart(e, id) {
+  _folderDragId = id;
+  e.dataTransfer.effectAllowed = 'move';
+  e.currentTarget.style.opacity = '0.4';
+}
+function folderDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }
+function folderDragEnter(e) { e.currentTarget.classList.add('folder-drag-over'); }
+function folderDragLeave(e) { e.currentTarget.classList.remove('folder-drag-over'); }
+function folderDragEnd(e) { e.currentTarget.style.opacity = ''; document.querySelectorAll('.folder-drag-over').forEach(el=>el.classList.remove('folder-drag-over')); }
+function folderDrop(e, targetId) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('folder-drag-over');
+  if (!_folderDragId || _folderDragId === targetId) return;
+  const fromIdx = docFolders.findIndex(f => f.id === _folderDragId);
+  const toIdx   = docFolders.findIndex(f => f.id === targetId);
+  if (fromIdx < 0 || toIdx < 0) return;
+  const [moved] = docFolders.splice(fromIdx, 1);
+  docFolders.splice(toIdx, 0, moved);
+  save('docFolders', docFolders);
+  renderFolders();
+  _folderDragId = null;
 }
 
 let selectedFolderIcon = '';
@@ -3731,12 +3765,13 @@ function renderDocs(filterProject) {
       <div class="doc-card-actions" onclick="event.stopPropagation()">${actions}</div>
       <div class="doc-card-title" style="${isTemplate?'margin-top:16px':''}">
         ${d.title || 'Untitled'}
-        ${isTemplate ? `<button onclick="event.stopPropagation();useTemplate('${d.id}')" style="margin-left:8px;font-size:10px;padding:2px 10px;border-radius:20px;background:var(--ink);color:#fff;border:none;cursor:pointer;font-family:var(--sans);font-weight:500;vertical-align:middle">Use</button>` : ''}
       </div>
       <div class="doc-card-preview">${isLocked ? '<span style="filter:blur(5px);user-select:none">••••••••••••••••••••••••••••••••••••••</span>' : (summary || '<span style="color:var(--border)">No content yet</span>')}</div>
       <div class="doc-card-meta">
         <span>${d.createdAt || ''}${d.updatedAt && d.updatedAt !== d.createdAt ? ' · edited ' + d.updatedAt : ''}</span>
-        ${!isTemplate && d.folder ? `<span class="doc-card-project">${(docFolders.find(f=>f.id===d.folder)||{}).name||''}</span>` : !isTemplate && d.project ? `<span class="doc-card-project">${d.project}</span>` : ''}
+        ${isTemplate
+          ? `<button onclick="event.stopPropagation();useTemplate('${d.id}')" style="font-size:10px;padding:3px 12px;border-radius:20px;background:var(--ink);color:#fff;border:none;cursor:pointer;font-family:var(--sans);font-weight:500">Use</button>`
+          : d.folder ? `<span class="doc-card-project">${(docFolders.find(f=>f.id===d.folder)||{}).name||''}</span>` : d.project ? `<span class="doc-card-project">${d.project}</span>` : ''}
       </div>
     </div>
   `}).join('');
