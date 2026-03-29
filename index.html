@@ -1699,7 +1699,7 @@
           <div id="docs-view-all">
             <div class="section-header">
               <div id="docs-view-title" class="section-title">All Docs</div>
-              <button class="btn btn-primary" onclick="openDoc(null)">+ New Doc</button>
+              <button class="btn btn-primary" id="docs-new-btn" onclick="openDoc(null)">+ New Doc</button>
             </div>
             <div id="docs-list" class="docs-grid"></div>
           </div>
@@ -2687,6 +2687,26 @@ function loadAll() {
   save('trashedDocs', trashedDocs);
   trashedProjects = trashedProjects.filter(p => p.trashedAt > cutoff);
   save('trashedProjects', trashedProjects);
+  // Seed Templates folder if it doesn't exist
+  if (!docFolders.find(f => f.id === 'folder_templates')) {
+    docFolders.push({ id: 'folder_templates', name: 'Templates', icon: '📋' });
+    save('docFolders', docFolders);
+  }
+  // Seed Project Kickoff template if no templates exist yet
+  if (!docs.find(d => d.folder === 'folder_templates')) {
+    const now = new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+    docs.push({
+      id: 'tpl_kickoff',
+      title: 'Project Kickoff',
+      folder: 'folder_templates',
+      project: '',
+      tags: ['template'],
+      createdAt: now, updatedAt: now, updatedTs: Date.now(),
+      cover: '',
+      body: `<h2>Project Overview</h2><p>Brief description of the project, its goals, and what success looks like.</p><h2>Objectives</h2><ul><li>Primary objective</li><li>Secondary objective</li><li>Key result to achieve</li></ul><h2>Scope</h2><p><strong>In scope:</strong></p><ul><li>Feature A</li><li>Feature B</li></ul><p><strong>Out of scope:</strong></p><ul><li>Feature C</li></ul><h2>Timeline</h2><ul><li><strong>Kickoff:</strong> [Date]</li><li><strong>Design complete:</strong> [Date]</li><li><strong>Handoff:</strong> [Date]</li><li><strong>Launch:</strong> [Date]</li></ul><h2>Team</h2><ul><li><strong>Lead:</strong> [Name]</li><li><strong>Design:</strong> [Name]</li><li><strong>Dev:</strong> [Name]</li><li><strong>PM:</strong> [Name]</li></ul><h2>Open Questions</h2><ul><li>?</li></ul><h2>Next Steps</h2><ul><li>Schedule kickoff meeting</li><li>Define success metrics</li><li>Set up project files</li></ul>`
+    });
+    save('docs', docs);
+  }
   // Stamp any doc missing updatedTs so sort order is stable
   let docsNeedSave = false;
   docs.forEach((d, i) => {
@@ -3501,10 +3521,15 @@ function quickAddTask() {
 }
 
 // ---- DOCS ----
+const TEMPLATES_FOLDER_ID = 'folder_templates';
 let currentFolder = 'all';
+
+function isTemplatesFolder() { return currentFolder === TEMPLATES_FOLDER_ID; }
 
 function selectFolder(id) {
   currentFolder = id;
+  const btn = document.getElementById('docs-new-btn');
+  if (btn) btn.textContent = isTemplatesFolder() ? '+ New Template' : '+ New Doc';
   // Update sidebar highlights
   document.querySelectorAll('.docs-folder-item').forEach(el => el.classList.remove('active'));
   const target = document.getElementById(id === 'trash' ? 'folder-trash' : id === 'all' ? 'folder-all' : 'folder-' + id);
@@ -3685,29 +3710,58 @@ function renderDocs(filterProject) {
     el.innerHTML = `<div class="empty-state" style="grid-column:1/-1">${filterProject ? 'No docs for this project yet' : 'No docs here yet'}</div>`;
     return;
   }
+  const inTemplates = currentFolder === 'folder_templates';
   el.innerHTML = list.map(d => {
     const isLocked = (lockedDocs||[]).includes(d.id);
+    const isTemplate = d.folder === 'folder_templates';
     const plainText = (d.body || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
     const summary = plainText.slice(0, 120) + (plainText.length > 120 ? '…' : '');
+    const actions = isTemplate
+      ? `<button class="doc-card-action-btn trash" onclick="event.stopPropagation();trashDoc('${d.id}')" title="Delete template">🗑</button>`
+      : `<select class="doc-card-action-btn" onchange="moveDocToFolder('${d.id}',this.value);this.value=''" title="Move to folder">
+          <option value="">Move…</option>
+          ${docFolders.filter(f=>f.id!=='folder_templates').map(f => `<option value="${f.id}">${f.name}</option>`).join('')}
+        </select>
+        <button class="doc-card-action-btn lock-btn" onclick="toggleDocLock('${d.id}')" title="${isLocked?'Unlock':'Lock'}">${isLocked?'🔓 Unlock':'🔒 Lock'}</button>
+        <button class="doc-card-action-btn trash" onclick="trashDoc('${d.id}')" title="Move to trash">🗑</button>`;
     return `
     <div class="doc-card${isLocked?' locked':''}" onclick="${isLocked?`openDocLockModal('${d.id}')`:`openDoc('${d.id}')`}">
       ${isLocked ? '<div class="doc-card-lock-badge">🔒</div>' : ''}
-      <div class="doc-card-actions" onclick="event.stopPropagation()">
-        <select class="doc-card-action-btn" onchange="moveDocToFolder('${d.id}',this.value);this.value=''" title="Move to folder">
-          <option value="">Move…</option>
-          ${docFolders.map(f => `<option value="${f.id}">${f.name}</option>`).join('')}
-        </select>
-        <button class="doc-card-action-btn lock-btn" onclick="toggleDocLock('${d.id}')" title="${isLocked?'Unlock':'Lock'}">${isLocked?'🔓 Unlock':'🔒 Lock'}</button>
-        <button class="doc-card-action-btn trash" onclick="trashDoc('${d.id}')" title="Move to trash">🗑</button>
+      ${isTemplate ? `<div style="position:absolute;top:10px;left:12px;font-size:9px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink2);font-family:var(--mono)">Template</div>` : ''}
+      <div class="doc-card-actions" onclick="event.stopPropagation()">${actions}</div>
+      <div class="doc-card-title" style="${isTemplate?'margin-top:16px':''}">
+        ${d.title || 'Untitled'}
+        ${isTemplate ? `<button onclick="event.stopPropagation();useTemplate('${d.id}')" style="margin-left:8px;font-size:10px;padding:2px 10px;border-radius:20px;background:var(--ink);color:#fff;border:none;cursor:pointer;font-family:var(--sans);font-weight:500;vertical-align:middle">Use</button>` : ''}
       </div>
-      <div class="doc-card-title">${d.title || 'Untitled'}</div>
       <div class="doc-card-preview">${isLocked ? '<span style="filter:blur(5px);user-select:none">••••••••••••••••••••••••••••••••••••••</span>' : (summary || '<span style="color:var(--border)">No content yet</span>')}</div>
       <div class="doc-card-meta">
         <span>${d.createdAt || ''}${d.updatedAt && d.updatedAt !== d.createdAt ? ' · edited ' + d.updatedAt : ''}</span>
-        ${d.folder ? `<span class="doc-card-project">${(docFolders.find(f=>f.id===d.folder)||{}).name||''}</span>` : d.project ? `<span class="doc-card-project">${d.project}</span>` : ''}
+        ${!isTemplate && d.folder ? `<span class="doc-card-project">${(docFolders.find(f=>f.id===d.folder)||{}).name||''}</span>` : !isTemplate && d.project ? `<span class="doc-card-project">${d.project}</span>` : ''}
       </div>
     </div>
   `}).join('');
+}
+
+function useTemplate(templateId) {
+  const tpl = docs.find(d => d.id === templateId);
+  if (!tpl) return;
+  const now = new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  const copy = {
+    id: 'doc_' + Date.now(),
+    title: tpl.title,
+    body: tpl.body,
+    project: '',
+    folder: '',        // lands in All Docs, not in Templates
+    tags: [...(tpl.tags||[]).filter(t => t !== 'template')],
+    cover: tpl.cover || '',
+    createdAt: now, updatedAt: now, updatedTs: Date.now(),
+  };
+  docs.push(copy);
+  save('docs', docs);
+  // Switch to All Docs so user can see their new copy
+  selectFolder('all');
+  renderDocs();
+  openDoc(copy.id);
 }
 
 function moveDocToFolder(docId, folderId) {
