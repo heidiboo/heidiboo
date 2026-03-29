@@ -28,6 +28,8 @@
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
+  * { scrollbar-width: none; -ms-overflow-style: none; }
+  *::-webkit-scrollbar { display: none; }
   body {
     font-family: var(--sans);
     background: var(--bg);
@@ -6020,10 +6022,35 @@ function renderProjectDetail() {
           ${p.due ? `<span style="font-size:11px;color:var(--ink2)">Due ${p.due}</span>` : ''}
         </div>
       </div>
-      <div style="min-width:160px">
-        <div style="font-size:11px;color:var(--ink2);margin-bottom:6px;font-family:var(--mono);letter-spacing:0.05em">PROGRESS</div>
-        <div class="progress-bar" style="width:100%;margin-bottom:4px"><div class="progress-fill" style="width:${p.progress}%"></div></div>
-        <div style="font-size:11px;color:var(--ink2)">${p.progress}%</div>
+      <div style="min-width:200px">
+        <div style="font-size:11px;color:var(--ink2);margin-bottom:8px;font-family:var(--mono);letter-spacing:0.05em">PROGRESS</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <div class="progress-bar" style="flex:1;margin:0"><div class="progress-fill" style="width:${p.progress}%"></div></div>
+          <input type="number" min="0" max="100" value="${p.progress}"
+            onchange="updateProject(${i},'progress',Math.min(100,Math.max(0,+this.value)));renderProjectDetail()"
+            style="width:48px;padding:3px 6px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:var(--sans);background:var(--bg);color:var(--ink);outline:none;text-align:center">
+          <span style="font-size:12px;color:var(--ink2)">%</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:11px;color:var(--ink3);width:32px">Start</span>
+            <input type="date" value="${p.startDate||''}"
+              onchange="updateProject(${i},'startDate',this.value);renderProjectDetail()"
+              style="flex:1;padding:3px 6px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:var(--sans);background:var(--bg);color:var(--ink);outline:none">
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:11px;color:var(--ink3);width:32px">Due</span>
+            <input type="date" value="${p.due||''}"
+              onchange="updateProject(${i},'due',this.value);renderProjectDetail()"
+              style="flex:1;padding:3px 6px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:var(--sans);background:var(--bg);color:var(--ink);outline:none">
+          </div>
+          ${p.due ? (() => {
+            const days = Math.ceil((new Date(p.due) - new Date()) / 86400000);
+            const color = days < 0 ? 'var(--accent)' : days <= 7 ? '#B45309' : 'var(--ink2)';
+            const label = days < 0 ? `${Math.abs(days)}d overdue` : days === 0 ? 'Due today' : `${days}d left`;
+            return `<div style="font-size:11px;font-weight:600;color:${color};text-align:right;margin-top:2px">${label}</div>`;
+          })() : ''}
+        </div>
       </div>
     </div>
 
