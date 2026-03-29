@@ -5971,6 +5971,43 @@ function ensureProjLinks(p) {
   });
 }
 
+function buildKickoffCard(doc) {
+  // Parse the doc's HTML body into heading sections
+  const tmp = document.createElement('div');
+  tmp.innerHTML = doc.body || '';
+  const sections = [];
+  let cur = null;
+  Array.from(tmp.children).forEach(node => {
+    const tag = (node.tagName || '').toLowerCase();
+    if (['h1','h2','h3'].includes(tag)) {
+      cur = { title: node.textContent.trim(), lines: [] };
+      sections.push(cur);
+    } else if (cur) {
+      if (tag === 'ul' || tag === 'ol') {
+        node.querySelectorAll('li').forEach(li => { const t = li.textContent.trim(); if (t) cur.lines.push(t); });
+      } else {
+        const t = node.textContent.trim(); if (t) cur.lines.push(t);
+      }
+    }
+  });
+  const sectionRows = sections.map(s => {
+    const lines = s.lines.slice(0, 3).map(l =>
+      `<div style="font-size:11px;color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:1px">${escHtml(l.length > 55 ? l.slice(0,55)+'…' : l)}</div>`
+    ).join('');
+    return `<div style="padding:7px 0;border-bottom:1px solid var(--border)">
+      <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--ink3);font-family:var(--mono);margin-bottom:3px">${escHtml(s.title)}</div>
+      ${lines || '<div style="font-size:11px;color:var(--ink3);font-style:italic">—</div>'}
+    </div>`;
+  }).join('');
+  return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;width:240px;flex-shrink:0;align-self:flex-start">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <span style="font-size:10px;font-weight:700;font-family:var(--mono);letter-spacing:0.09em;color:var(--ink);text-transform:uppercase">Kickoff Recap</span>
+      <button onclick="openDoc('${doc.id}')" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--ink2);font-family:var(--sans);padding:0;line-height:1">Open ↗</button>
+    </div>
+    ${sectionRows || '<div style="font-size:11px;color:var(--ink3);font-style:italic">No sections found</div>'}
+  </div>`;
+}
+
 function renderProjectDetail() {
   const i = _currentProjectIdx;
   if (i < 0 || i >= projects.length) { closeProject(); return; }
@@ -5981,6 +6018,8 @@ function renderProjectDetail() {
   const sc = statusBadge[p.status] || 'badge-active';
   const zc = sizeBadge[p.size] || 'badge-sm';
   const projDocs = docs.filter(d => d.project === p.name);
+  const kickoffDoc = projDocs.find(d => /kickoff/i.test(d.title));
+  const kickoffCardHtml = kickoffDoc ? buildKickoffCard(kickoffDoc) : '';
   const el = document.getElementById('proj-detail-content');
 
   const linkChips = p.links.map((l, li) => {
@@ -6043,18 +6082,23 @@ function renderProjectDetail() {
       </div>
     </div>
 
-    <!-- Docs -->
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-      <div style="font-family:var(--mono);font-size:11px;letter-spacing:0.08em;color:var(--ink2);text-transform:uppercase">Docs // ${projDocs.length}</div>
-      <button class="btn btn-primary" onclick="openProjectDocsPicker(${i})" style="font-size:12px;padding:6px 14px">+ Link Docs</button>
+    <!-- Docs + Kickoff Recap -->
+    <div style="display:flex;gap:20px;align-items:flex-start">
+      ${kickoffCardHtml}
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+          <div style="font-family:var(--mono);font-size:11px;letter-spacing:0.08em;color:var(--ink2);text-transform:uppercase">Docs // ${projDocs.length}</div>
+          <button class="btn btn-primary" onclick="openProjectDocsPicker(${i})" style="font-size:12px;padding:6px 14px">+ Link Docs</button>
+        </div>
+        ${projDocs.length ? `<div class="docs-grid">${projDocs.map(d => `
+          <div class="doc-card" onclick="openDoc('${d.id}')">
+            <div class="doc-card-title">${escHtml(d.title || 'Untitled')}</div>
+            <div class="doc-card-preview">${escHtml((d.body||'').replace(/<[^>]*>/g,'').slice(0,100))}</div>
+            <div class="doc-card-meta"><span>${d.updatedAt || ''}</span></div>
+          </div>`).join('')}</div>`
+        : `<div class="empty-state">No docs linked yet — click Link Docs to attach existing docs or create a new one</div>`}
+      </div>
     </div>
-    ${projDocs.length ? `<div class="docs-grid">${projDocs.map(d => `
-      <div class="doc-card" onclick="openDoc('${d.id}')">
-        <div class="doc-card-title">${escHtml(d.title || 'Untitled')}</div>
-        <div class="doc-card-preview">${escHtml((d.body||'').replace(/<[^>]*>/g,'').slice(0,100))}</div>
-        <div class="doc-card-meta"><span>${d.updatedAt || ''}</span></div>
-      </div>`).join('')}</div>`
-    : `<div class="empty-state">No docs linked yet — click Link Docs to attach existing docs or create a new one</div>`}
   `;
 }
 
