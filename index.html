@@ -6601,6 +6601,7 @@ function exitBaseline() {
   scheduleData = JSON.parse(JSON.stringify(scheduleHistory[currentScheduleWeek] || getBaseline()));
   document.getElementById('sched-normal-header').style.display = 'flex';
   document.getElementById('sched-baseline-banner').style.display = 'none';
+  renderScheduleSidebar();
   renderSchedule();
 }
 function exitRoutineView() {
@@ -6871,6 +6872,7 @@ function showRoutineView(view) {
       bannerBtn.onclick = exitRoutineView;
     }
   }
+  renderScheduleSidebar();
   if (view === 'weekly') renderSchedule();
   else renderRoutineWorkouts();
 }
@@ -7215,7 +7217,7 @@ function renderScheduleSidebar() {
           const monthName = new Date(+my,+mm-1,1).toLocaleDateString('en-US',{month:'long'});
           const weeks = byYearMonth[y][ym].sort((a,b)=>b.localeCompare(a));
           return weeks.map(wk => {
-            const isActive = wk === currentScheduleWeek;
+            const isActive = !_editingBaseline && wk === currentScheduleWeek;
             const isThis = wk === thisWeek;
             return `<div class="hist-month-item${isActive?' active':''}" onclick="switchScheduleWeek('${wk}')">
               <span class="hist-month-name">${isThis ? 'This week' : weekKeyToLabel(wk)}</span>
