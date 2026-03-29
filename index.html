@@ -1116,7 +1116,7 @@
   /* Workout template cards */
   .wtpl-wrap { padding: 24px 32px 48px; }
   .wtpl-header-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
-  .wtpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+  .wtpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
   .wtpl-card {
     background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
     padding: 16px 18px; transition: border-color 0.15s;
@@ -1140,6 +1140,10 @@
     background: transparent; color: var(--ink2); font-family: var(--sans); cursor: pointer;
   }
   .wtpl-exercises { margin-bottom: 10px; }
+  /* Template exercises have no drag handle — override grid to 3 cols */
+  .wtpl-exercises .workout-ex { grid-template-columns: 1fr 80px 22px; }
+  .wtpl-exercises .workout-ex-del { opacity: 0; }
+  .wtpl-exercises .workout-ex:hover .workout-ex-del { opacity: 0.4; }
   /* Routine workouts view (legacy - kept for fallback) */
   .routine-workouts-wrap { padding: 24px 32px 48px; }
   .routine-workout-day { margin-bottom: 32px; }
@@ -1689,9 +1693,9 @@
               <button class="btn" onclick="copyBaselineToWeek(currentScheduleWeek)" style="font-size:11px;padding:5px 12px;border:1px solid var(--border);background:transparent;color:var(--ink2)">↺ Reset to baseline</button>
             </div>
           </div>
-          <div id="sched-baseline-banner" style="display:none;align-items:center;justify-content:space-between;padding:10px 16px;margin-bottom:16px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px">
-            <span id="sched-baseline-banner-text" style="font-size:12px;color:#92400E;font-family:var(--mono)">✎ Editing baseline template — changes save automatically</span>
-            <button id="sched-banner-btn" onclick="exitRoutineView()" style="font-size:11px;padding:4px 10px;background:#1A1A1A;color:#F9F7F3;border:none;border-radius:5px;cursor:pointer;font-family:var(--sans)">Done</button>
+          <div id="sched-baseline-banner" style="display:none;align-items:center;justify-content:space-between;padding:6px 0 18px">
+            <h2 id="sched-baseline-banner-text" style="font-size:20px;font-weight:700;font-family:var(--mono);color:var(--ink);margin:0"></h2>
+            <button id="sched-banner-btn" onclick="exitRoutineView()" style="font-size:11px;padding:5px 14px;background:var(--ink);color:#F9F7F3;border:none;border-radius:5px;cursor:pointer;font-family:var(--sans);font-weight:500">Done</button>
           </div>
           <div class="schedule-wrap" id="schedule-wrap"></div>
         </div>
@@ -5877,6 +5881,16 @@ function getBaseline() {
 }
 
 function loadSchedule() {
+  // Auto-reset to baseline every new week (week starts Sunday)
+  const weekKey = (() => { const d = new Date(); const day = d.getDay(); const mon = new Date(d); mon.setDate(d.getDate() - ((day + 6) % 7)); return mon.toISOString().slice(0,10); })();
+  const lastWeek = load('schedLastWeek', '');
+  if (weekKey !== lastWeek) {
+    save('schedLastWeek', weekKey);
+    const baseline = getBaseline();
+    save('scheduleData', baseline);
+    scheduleData = JSON.parse(JSON.stringify(baseline));
+    return;
+  }
   const saved = load('scheduleData', null);
   scheduleData = saved ? saved : JSON.parse(JSON.stringify(getBaseline()));
   if (!saved) save('scheduleData', scheduleData);
@@ -6097,6 +6111,7 @@ function startSaveSprite(onDone) {
   requestAnimationFrame(loop);
 }
 const WORKOUT_TYPES = ['Push','Pull','Legs','Cardio','Upper','Lower','Full Body','Custom'];
+let customWorkoutTypes = load('customWorkoutTypes', []);
 let _schedMode = 'week';
 let workoutTemplates = load('workoutTemplates', []);
 if (!workoutTemplates.length) {
@@ -6161,9 +6176,7 @@ function showRoutineView(view) {
   document.getElementById('sched-normal-header').style.display = 'none';
   document.getElementById('sched-baseline-banner').style.display = 'flex';
   const bannerText = document.getElementById('sched-baseline-banner-text');
-  if (bannerText) bannerText.textContent = view === 'weekly'
-    ? '✎ Weekly Schedule — editing baseline template'
-    : '✎ Workouts — manage your workout templates';
+  if (bannerText) bannerText.textContent = view === 'weekly' ? 'Weekly Schedule' : 'Workouts';
   const bannerBtn = document.getElementById('sched-banner-btn');
   if (bannerBtn) {
     if (view === 'weekly') {
@@ -6186,8 +6199,9 @@ function renderRoutineWorkouts() {
       <div class="wtpl-header">
         <input class="wtpl-name-input" value="${escHtml(t.name)}" placeholder="Workout name"
           onchange="workoutTemplates[${ti}].name=this.value;save('workoutTemplates',workoutTemplates)">
-        <select class="wtpl-type-select" onchange="workoutTemplates[${ti}].type=this.value;save('workoutTemplates',workoutTemplates)">
-          ${WORKOUT_TYPES.map(ty=>`<option value="${ty}"${t.type===ty?' selected':''}>${ty}</option>`).join('')}
+        <select class="wtpl-type-select" onchange="wtplTypeChange(${ti},this.value)">
+          ${[...WORKOUT_TYPES,...customWorkoutTypes].map(ty=>`<option value="${ty}"${t.type===ty?' selected':''}>${ty}</option>`).join('')}
+          <option value="__new__">+ New type…</option>
         </select>
         <button class="wtpl-del" onclick="deleteWorkoutTemplate(${ti})" title="Delete">✕</button>
       </div>
@@ -6228,6 +6242,23 @@ function addWorkoutTemplate() {
 
 function deleteWorkoutTemplate(ti) {
   workoutTemplates.splice(ti, 1);
+  save('workoutTemplates', workoutTemplates);
+  renderRoutineWorkouts();
+}
+
+function wtplTypeChange(ti, val) {
+  if (val === '__new__') {
+    const name = prompt('New workout type label:');
+    if (!name?.trim()) { renderRoutineWorkouts(); return; }
+    const label = name.trim();
+    if (![...WORKOUT_TYPES,...customWorkoutTypes].includes(label)) {
+      customWorkoutTypes.push(label);
+      save('customWorkoutTypes', customWorkoutTypes);
+    }
+    workoutTemplates[ti].type = label;
+  } else {
+    workoutTemplates[ti].type = val;
+  }
   save('workoutTemplates', workoutTemplates);
   renderRoutineWorkouts();
 }
