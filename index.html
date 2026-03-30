@@ -7481,7 +7481,13 @@ function saveSchedule() {
     save('scheduleBaseline', scheduleData);
     return;
   }
-  save('scheduleData', scheduleData);
+  // Always save to per-week history
+  saveCurrentWeek();
+  // Only update the shared 'scheduleData' key when viewing the actual current week
+  // (prevents past-week edits from clobbering the current week's live data)
+  if (currentScheduleWeek === getISOWeekKey(new Date())) {
+    save('scheduleData', scheduleData);
+  }
 }
 
 function editBaseline() {
