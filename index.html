@@ -3549,6 +3549,17 @@ function renderTaskDays() {
   if (!el) return;
   const today = todayKey();
 
+  // Purge stale empty tasks (no text, no notes) that shouldn't persist
+  let purged = false;
+  taskDays.forEach(day => {
+    const before = day.tasks.length;
+    day.tasks = day.tasks.filter(t =>
+      t.text.trim() || (t.body && t.body.replace(/<[^>]*>/g,'').trim())
+    );
+    if (day.tasks.length !== before) purged = true;
+  });
+  if (purged) save('taskDays', taskDays);
+
   if (!taskDays.find(d => d.date === today)) {
     taskDays.unshift({ date: today, tasks: [] });
     save('taskDays', taskDays);
@@ -3617,7 +3628,7 @@ function renderTaskRow(t, date) {
     <div style="display:flex;align-items:center;gap:10px;padding:9px 20px">
       <span class="drag-handle">⠿</span>
       <div class="day-task-check ${t.done?'done':''}" onclick="toggleDayTask('${date}','${t.id}')"></div>
-      <span class="day-task-label ${t.done?'done':''}" style="flex:1;min-width:0" ${!t.done?`contenteditable="true" data-date="${date}" data-id="${t.id}" onblur="saveTaskLabel('${date}','${t.id}',this)" onkeydown="taskLabelKey(event,'${date}','${t.id}')" onpaste="event.preventDefault();document.execCommand('insertText',false,event.clipboardData.getData('text/plain'))`:``}>${escHtml(t.text)}</span>
+      <span class="day-task-label ${t.done?'done':''}" style="flex:1;min-width:60px;display:inline-block" ${!t.done?`contenteditable="true" data-date="${date}" data-id="${t.id}" onblur="saveTaskLabel('${date}','${t.id}',this)" onkeydown="taskLabelKey(event,'${date}','${t.id}')" onpaste="event.preventDefault();document.execCommand('insertText',false,event.clipboardData.getData('text/plain'))`:``}>${escHtml(t.text)}</span>
       ${t.rolledFrom ? `<span class="day-task-rolled">↳ ${formatDayLabel(t.rolledFrom)}</span>` : ''}
       <button class="task-expand-btn${hasNotes?' has-notes':''}" onclick="toggleTaskNotes(this)" title="Notes">${expanded?'▴':'▾'}</button>
       <button class="day-task-del" onclick="deleteDayTask('${date}','${t.id}')">✕</button>
@@ -3856,6 +3867,15 @@ function saveTaskLabel(date, id, el) {
   const day = taskDays.find(d => d.date === date); if (!day) return;
   const t = day.tasks.find(t => t.id === id); if (!t) return;
   const newText = el.textContent.trim();
+  // Auto-delete if left empty with no notes
+  if (!newText && !(t.body && t.body.replace(/<[^>]*>/g,'').trim())) {
+    day.tasks = day.tasks.filter(tt => tt.id !== id);
+    save('taskDays', taskDays);
+    renderTaskDays();
+    renderTodos();
+    renderFocusTodos();
+    return;
+  }
   if (newText !== t.text) {
     t.text = newText;
     save('taskDays', taskDays);
