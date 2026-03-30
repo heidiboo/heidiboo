@@ -6191,8 +6191,8 @@ function ensureProjLinks(p) {
   });
 }
 
-function buildKickoffCard(doc) {
-  // Parse the doc's HTML body into heading sections
+function buildKickoffSections(doc) {
+  // Returns only the inner section rows (no card wrapper or header)
   const tmp = document.createElement('div');
   tmp.innerHTML = doc.body || '';
   const sections = [];
@@ -6210,7 +6210,7 @@ function buildKickoffCard(doc) {
       }
     }
   });
-  const sectionRows = sections.map(s => {
+  return sections.map(s => {
     const lines = s.lines.slice(0, 3).map(l =>
       `<div style="font-size:11px;color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:1px">${escHtml(l.length > 55 ? l.slice(0,55)+'…' : l)}</div>`
     ).join('');
@@ -6218,14 +6218,7 @@ function buildKickoffCard(doc) {
       <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--ink3);font-family:var(--mono);margin-bottom:3px">${escHtml(s.title)}</div>
       ${lines || '<div style="font-size:11px;color:var(--ink3);font-style:italic">—</div>'}
     </div>`;
-  }).join('');
-  return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;width:300px;flex-shrink:0;align-self:flex-start">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-      <span style="font-size:10px;font-weight:700;font-family:var(--mono);letter-spacing:0.09em;color:var(--ink);text-transform:uppercase">Kickoff Recap</span>
-      <button onclick="openDoc('${doc.id}')" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--ink2);font-family:var(--sans);padding:0;line-height:1">Open ↗</button>
-    </div>
-    ${sectionRows || '<div style="font-size:11px;color:var(--ink3);font-style:italic">No sections found</div>'}
-  </div>`;
+  }).join('') || '<div style="font-size:11px;color:var(--ink3);font-style:italic">No sections found</div>';
 }
 
 function renderProjectDetail() {
@@ -6239,7 +6232,7 @@ function renderProjectDetail() {
   const zc = sizeBadge[p.size] || 'badge-sm';
   const projDocs = docs.filter(d => d.project === p.name);
   const kickoffDoc = projDocs.find(d => /kickoff/i.test(d.title));
-  const kickoffCardHtml = kickoffDoc ? buildKickoffCard(kickoffDoc) : '';
+  const kickoffSectionsHtml = kickoffDoc ? buildKickoffSections(kickoffDoc) : '';
   const el = document.getElementById('proj-detail-content');
   // Gallery
   const gallery = p.gallery || [];
@@ -6333,26 +6326,36 @@ function renderProjectDetail() {
       </div>
     </div>
 
-    <!-- Kickoff + Action Log side by side -->
-    <div style="display:flex;gap:20px;align-items:flex-start;margin-bottom:28px">
-      ${kickoffCardHtml}
-      <div style="flex:1;min-width:0">
-        <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.1em;color:var(--ink2);text-transform:uppercase;margin-bottom:10px">Action Log</div>
-        <div style="display:flex;gap:8px;margin-bottom:12px">
-          <textarea id="action-log-input" placeholder="Update, decision, blocker… (Enter to log)" rows="2"
-            style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:var(--sans);background:var(--bg);color:var(--ink);outline:none;resize:none;line-height:1.5"
-            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();addActionLog(${i});}"></textarea>
-          <button onclick="addActionLog(${i})" class="btn btn-primary" style="align-self:flex-end;padding:7px 14px;font-size:12px">Log</button>
+    <!-- Kickoff + Action Log — aligned headers -->
+    <div style="display:flex;gap:24px;align-items:flex-start;margin-bottom:28px">
+      ${kickoffDoc ? `<div style="width:300px;flex-shrink:0">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;min-height:28px">
+          <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.1em;color:var(--ink2);text-transform:uppercase">Kickoff Recap</span>
+          <button onclick="openDoc('${kickoffDoc.id}')" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--ink2);font-family:var(--sans);padding:0;line-height:1">Open ↗</button>
         </div>
-        <div id="action-log-list" style="max-height:280px;overflow-y:auto">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px">
+          ${kickoffSectionsHtml}
+        </div>
+      </div>` : ''}
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;min-height:28px">
+          <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.1em;color:var(--ink2);text-transform:uppercase">Action Log</span>
+          <button id="action-log-toggle-btn" onclick="toggleActionLogInput(${i})" style="padding:4px 12px;border:1px solid var(--border);border-radius:20px;background:transparent;cursor:pointer;font-size:11px;color:var(--ink2);font-family:var(--sans)">+ Log</button>
+        </div>
+        <div id="action-log-input-area" style="display:none;margin-bottom:12px">
+          <textarea id="action-log-input" placeholder="Update, decision, blocker… (Enter to log)" rows="2" autofocus
+            style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:var(--sans);background:var(--bg);color:var(--ink);outline:none;resize:none;line-height:1.5;box-sizing:border-box"
+            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();addActionLog(${i});}if(event.key==='Escape'){toggleActionLogInput(${i});}"></textarea>
+        </div>
+        <div id="action-log-list" style="max-height:300px;overflow-y:auto">
           ${((p.actionLog||[]).slice().reverse()).map(entry => `
-            <div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);group" data-log-id="${entry.id}">
+            <div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)" data-log-id="${entry.id}">
               <div style="flex-shrink:0;width:6px;height:6px;border-radius:50%;background:var(--ink3);margin-top:5px"></div>
               <div style="flex:1;min-width:0">
                 <div contenteditable="true" style="font-size:12px;color:var(--ink);line-height:1.5;white-space:pre-wrap;outline:none;cursor:text"
                   onblur="editActionLog(${i},'${entry.id}',this.textContent.trim())"
-                  onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();this.blur();}"
-                >${escHtml(entry.text)}</div>
+                  onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();this.blur();}">
+                  ${escHtml(entry.text)}</div>
                 <div style="font-size:10px;color:var(--ink3);margin-top:2px;font-family:var(--mono)">${entry.ts}</div>
               </div>
               <button onclick="deleteActionLog(${i},'${entry.id}')" style="background:none;border:none;cursor:pointer;color:var(--ink3);font-size:13px;opacity:0;padding:2px 4px;align-self:flex-start;line-height:1;flex-shrink:0" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0'" title="Delete">×</button>
@@ -6877,6 +6880,16 @@ function openFigmaEmbed(url) {
   modal.style.display = 'flex';
 }
 
+function toggleActionLogInput(pi) {
+  const area = document.getElementById('action-log-input-area');
+  const btn  = document.getElementById('action-log-toggle-btn');
+  if (!area) return;
+  const opening = area.style.display === 'none';
+  area.style.display = opening ? 'block' : 'none';
+  if (btn) btn.textContent = opening ? '× Cancel' : '+ Log';
+  if (opening) setTimeout(() => document.getElementById('action-log-input')?.focus(), 30);
+}
+
 function addActionLog(pi) {
   const p = projects[pi]; if (!p) return;
   const inp = document.getElementById('action-log-input');
@@ -6888,9 +6901,7 @@ function addActionLog(pi) {
   p.actionLog.push({ id: 'log_'+Date.now(), text, ts });
   save('projects', projects);
   inp.value = '';
-  renderProjectDetail();
-  // Scroll log into view
-  document.getElementById('action-log-list')?.scrollIntoView({behavior:'smooth',block:'nearest'});
+  renderProjectDetail(); // re-renders with input hidden
 }
 
 function editActionLog(pi, logId, newText) {
