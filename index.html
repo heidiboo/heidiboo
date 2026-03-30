@@ -2000,10 +2000,7 @@
         <div id="doc-related-list" class="doc-related-grid"></div>
       </div>
     </div>
-    <!-- Slash menu lives inside the modal so it scrolls with it -->
-    <div id="slash-menu" style="display:none;position:absolute">
-      <div class="slash-menu-inner" id="slash-menu-inner"></div>
-    </div>
+    <!-- Slash menu moved to body level for global use -->
     <!-- Mention menu -->
     <div id="mention-menu">
       <div id="mention-menu-inner"></div>
@@ -5351,13 +5348,18 @@ function showSlashMenu(range) {
   document.getElementById('slash-menu-inner').innerHTML = html;
 
   const rect = range.getBoundingClientRect();
-  const modal = document.getElementById('doc-modal');
-  const scrollTop = modal ? modal.scrollTop : 0;
-  const scrollLeft = modal ? modal.scrollLeft : 0;
-  const modalRect = modal ? modal.getBoundingClientRect() : {left:0,top:0};
-  menu.style.left = Math.min(rect.left - modalRect.left, window.innerWidth - 280) + 'px';
-  menu.style.top  = (rect.bottom - modalRect.top + scrollTop + 8) + 'px';
+  // Use viewport coords (position:fixed) so it works from any context
+  const left = Math.min(rect.left, window.innerWidth - 280);
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const top = spaceBelow > 200 ? rect.bottom + 6 : rect.top - 8;
+  menu.style.left = left + 'px';
+  menu.style.top  = (spaceBelow > 200 ? rect.bottom + 6 : rect.top - 8 - menu.offsetHeight) + 'px';
   menu.style.display = 'block';
+  // Re-position after display so offsetHeight is accurate
+  requestAnimationFrame(() => {
+    const menuH = menu.offsetHeight;
+    menu.style.top = (spaceBelow > 200 ? rect.bottom + 6 : rect.top - 6 - menuH) + 'px';
+  });
 }
 
 function highlightSlash() {
@@ -9241,6 +9243,11 @@ function init() {
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- Global slash menu — fixed so it works from docs AND task notes -->
+  <div id="slash-menu" style="display:none;position:fixed">
+    <div class="slash-menu-inner" id="slash-menu-inner"></div>
   </div>
 </body>
 </html>
