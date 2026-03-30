@@ -1261,6 +1261,17 @@
   .task-tag { display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:500;background:rgba(0,0,0,0.07);color:var(--ink2);cursor:pointer }
   .task-tag-del { background:none;border:none;cursor:pointer;color:var(--ink3);font-size:11px;padding:0;line-height:1 }
   .task-img-thumb { width:60px;height:60px;object-fit:cover;border-radius:6px;cursor:pointer }
+  /* ── PROJECT GALLERY ── */
+  .proj-gallery-hero { width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:var(--radius);cursor:pointer;display:block;background:var(--surface);border:1px solid var(--border) }
+  .proj-gallery-thumb { width:72px;height:54px;object-fit:cover;border-radius:6px;cursor:pointer;border:2px solid transparent;flex-shrink:0;transition:border-color 0.15s,opacity 0.15s }
+  .proj-gallery-thumb:hover { opacity:0.85 }
+  .proj-gallery-thumb.active { border-color:var(--ink) }
+  .proj-gallery-drop { border:2px dashed var(--border);border-radius:var(--radius);padding:20px;text-align:center;cursor:pointer;transition:background 0.1s;color:var(--ink3);font-size:12px }
+  .proj-gallery-drop.drag-over { background:rgba(0,0,0,0.04);border-color:var(--ink2) }
+  /* figma embed modal */
+  .figma-modal { position:fixed;inset:0;z-index:9200;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center }
+  .figma-modal-inner { background:#000;border-radius:var(--radius);width:90vw;height:85vh;overflow:hidden;position:relative }
+  .figma-modal-inner iframe { width:100%;height:100%;border:none }
 
   .sched-time-arrow { font-family: var(--mono); font-size: 9px; color: var(--ink3); padding: 0 3px; }
 
@@ -1838,7 +1849,8 @@
           <div id="sched-normal-header" class="section-header" style="padding-bottom:16px">
             <div class="section-title" id="schedule-week-title">This week</div>
             <div style="display:flex;gap:8px">
-              <button class="btn sched-reset-btn" onclick="copyBaselineToWeek(currentScheduleWeek)" style="font-size:11px;padding:5px 12px;border:1px solid var(--border);background:transparent;color:var(--ink2);opacity:0;transition:opacity 0.15s">↺ Reset to baseline</button>
+              <button class="btn" onclick="saveCurrentWeek();renderSchedule()" style="font-size:11px;padding:5px 12px;border:1px solid var(--border);background:transparent;color:var(--ink2)">Save week</button>
+              <button class="btn" onclick="if(confirm('Reset this week to your baseline template?'))copyBaselineToWeek(currentScheduleWeek)" style="font-size:11px;padding:5px 12px;border:1px solid var(--border);background:transparent;color:var(--ink2)">↺ Reset to baseline</button>
             </div>
           </div>
           <div id="sched-baseline-banner" style="display:none;align-items:center;justify-content:space-between;padding:6px 0 18px">
@@ -2973,15 +2985,16 @@ function renderOverview() {
   if (op) {
     const active = projects.filter(p => p.status === 'Active').slice(0, 4);
     if (!active.length) { op.innerHTML = '<div class="empty-state">No active projects</div>'; }
-    else op.innerHTML = active.map(p => `
-      <div style="margin-bottom:14px">
-        <div style="display:flex;justify-content:space-between;margin-bottom:5px">
-          <span style="font-size:13px;font-weight:500">${p.name}</span>
+    else op.innerHTML = active.map((p, ri) => {
+      const idx = projects.indexOf(p);
+      return `<div style="margin-bottom:14px;cursor:pointer" onclick="showTab('projects',document.querySelector('.nav-btn[onclick*=projects]'));openProject(${idx})">
+        <div style="display:flex;justify-content:space-between;margin-bottom:5px;align-items:center">
+          <span style="font-size:13px;font-weight:500;color:var(--ink)">${escHtml(p.name)}</span>
           <span style="font-size:11px;color:var(--ink2)">${p.progress}%</span>
         </div>
         <div class="progress-bar"><div class="progress-fill" style="width:${p.progress}%"></div></div>
-      </div>
-    `).join('');
+      </div>`;
+    }).join('');
   }
   const od = document.getElementById('overview-docs');
   if (od) {
@@ -6226,6 +6239,35 @@ function renderProjectDetail() {
   const kickoffDoc = projDocs.find(d => /kickoff/i.test(d.title));
   const kickoffCardHtml = kickoffDoc ? buildKickoffCard(kickoffDoc) : '';
   const el = document.getElementById('proj-detail-content');
+  // Gallery
+  const gallery = p.gallery || [];
+  const heroIdx = p._galleryHero ?? (gallery.length > 0 ? gallery.length - 1 : -1);
+  const figmaLink = p.links?.find(l => /figma/i.test(l.label) && l.url);
+  const galleryHtml = `
+    <div style="margin-bottom:28px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.1em;color:var(--ink2);text-transform:uppercase">Gallery</div>
+        <div style="display:flex;gap:6px">
+          ${figmaLink ? `<button onclick="openFigmaEmbed('${escHtml(figmaLink.url)}')" style="padding:4px 10px;border:1px solid var(--border);border-radius:20px;background:transparent;cursor:pointer;font-size:11px;color:var(--ink2);font-family:var(--sans)">🎨 Preview Figma</button>` : ''}
+          <label style="padding:4px 10px;border:1px dashed var(--border);border-radius:20px;cursor:pointer;font-size:11px;color:var(--ink2);font-family:var(--sans)">+ Add screenshot
+            <input type="file" accept="image/*" multiple style="display:none" onchange="addGalleryImages(${i},this)">
+          </label>
+        </div>
+      </div>
+      ${gallery.length ? `
+        <img src="${gallery[heroIdx]?.src}" class="proj-gallery-hero" onclick="openGalleryLightbox(${i},${heroIdx})" style="margin-bottom:8px">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          ${gallery.map((g,gi) => `<div style="position:relative">
+            <img src="${g.src}" class="proj-gallery-thumb${gi===heroIdx?' active':''}" onclick="setGalleryHero(${i},${gi})" title="${escHtml(g.addedAt||'')}">
+            <button onclick="removeGalleryImg(${i},${gi})" style="position:absolute;top:-4px;right:-4px;background:var(--ink);color:#fff;border:none;border-radius:50%;width:15px;height:15px;font-size:9px;cursor:pointer;line-height:1;padding:0;display:none" class="gallery-del-btn">×</button>
+          </div>`).join('')}
+        </div>` : `
+        <label class="proj-gallery-drop" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="handleGalleryDrop(${i},event)">
+          <div style="font-size:20px;margin-bottom:6px">🖼</div>
+          Paste or drag screenshots here, or click to upload
+          <input type="file" accept="image/*" multiple style="display:none" onchange="addGalleryImages(${i},this)">
+        </label>`}
+    </div>`;
 
   const linkChips = p.links.map((l, li) => {
     const hasUrl = l.url && l.url.trim();
@@ -6277,6 +6319,8 @@ function renderProjectDetail() {
         </div>
       </div>
     </div>
+
+    ${galleryHtml}
 
     <!-- Quick Links -->
     <div style="margin-bottom:28px">
@@ -6695,6 +6739,140 @@ function saveMeetingDoc() {
   renderDocs(); renderFolders();
   showTab('docs', document.querySelector('.nav-btn[onclick*="docs"]'));
   openDoc(doc.id);
+}
+
+// ── PROJECT GALLERY ──
+function addGalleryImages(pi, input) {
+  const p = projects[pi]; if (!p) return;
+  if (!p.gallery) p.gallery = [];
+  const files = Array.from(input.files);
+  let loaded = 0;
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const now = new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+      p.gallery.push({ id:'gi_'+Date.now()+'_'+loaded, src:e.target.result, addedAt:now });
+      p._galleryHero = p.gallery.length - 1;
+      loaded++;
+      if (loaded === files.length) { save('projects', projects); renderProjectDetail(); }
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function handleGalleryDrop(pi, e) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  const p = projects[pi]; if (!p) return;
+  if (!p.gallery) p.gallery = [];
+  const files = Array.from(e.dataTransfer.files).filter(f=>f.type.startsWith('image/'));
+  let loaded = 0;
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const now = new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+      p.gallery.push({ id:'gi_'+Date.now()+'_'+loaded, src:ev.target.result, addedAt:now });
+      p._galleryHero = p.gallery.length - 1;
+      loaded++;
+      if (loaded === files.length) { save('projects', projects); renderProjectDetail(); }
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function setGalleryHero(pi, gi) {
+  const p = projects[pi]; if (!p) return;
+  p._galleryHero = gi;
+  renderProjectDetail();
+}
+
+function removeGalleryImg(pi, gi) {
+  const p = projects[pi]; if (!p || !p.gallery) return;
+  p.gallery.splice(gi, 1);
+  if (p._galleryHero >= p.gallery.length) p._galleryHero = Math.max(0, p.gallery.length - 1);
+  save('projects', projects);
+  renderProjectDetail();
+}
+
+let _lightboxPi = -1, _lightboxGi = -1;
+function openGalleryLightbox(pi, gi) {
+  _lightboxPi = pi; _lightboxGi = gi;
+  const p = projects[pi]; if (!p?.gallery?.[gi]) return;
+  let lb = document.getElementById('gallery-lightbox');
+  if (!lb) {
+    lb = document.createElement('div');
+    lb.id = 'gallery-lightbox';
+    lb.style.cssText = 'position:fixed;inset:0;z-index:9800;background:rgba(0,0,0,0.88);display:flex;align-items:center;justify-content:center;cursor:zoom-out';
+    lb.innerHTML = `<button onclick="lbNav(-1)" style="position:absolute;left:20px;background:rgba(255,255,255,0.15);border:none;color:#fff;font-size:24px;width:44px;height:44px;border-radius:50%;cursor:pointer;line-height:1">‹</button>
+      <img id="lb-img" style="max-width:90vw;max-height:90vh;object-fit:contain;border-radius:8px">
+      <button onclick="lbNav(1)" style="position:absolute;right:20px;background:rgba(255,255,255,0.15);border:none;color:#fff;font-size:24px;width:44px;height:44px;border-radius:50%;cursor:pointer;line-height:1">›</button>
+      <button onclick="document.getElementById('gallery-lightbox').style.display='none'" style="position:absolute;top:16px;right:16px;background:rgba(255,255,255,0.15);border:none;color:#fff;font-size:20px;width:36px;height:36px;border-radius:50%;cursor:pointer;line-height:1">×</button>`;
+    lb.addEventListener('click', e => { if (e.target === lb) lb.style.display = 'none'; });
+    document.body.appendChild(lb);
+  }
+  document.getElementById('lb-img').src = p.gallery[gi].src;
+  lb.style.display = 'flex';
+}
+
+function lbNav(dir) {
+  const p = projects[_lightboxPi]; if (!p?.gallery?.length) return;
+  _lightboxGi = (_lightboxGi + dir + p.gallery.length) % p.gallery.length;
+  document.getElementById('lb-img').src = p.gallery[_lightboxGi].src;
+}
+
+// Show delete buttons on gallery hover
+document.addEventListener('mouseover', e => {
+  const thumb = e.target.closest('.proj-gallery-thumb')?.parentElement;
+  if (thumb) { const btn = thumb.querySelector('.gallery-del-btn'); if (btn) btn.style.display = 'block'; }
+});
+document.addEventListener('mouseout', e => {
+  const thumb = e.target.closest('.proj-gallery-thumb')?.parentElement;
+  if (thumb && !thumb.matches(':hover')) { const btn = thumb.querySelector('.gallery-del-btn'); if (btn) btn.style.display = 'none'; }
+});
+
+// Paste image from clipboard into gallery
+document.addEventListener('paste', e => {
+  const pi = _currentProjectIdx; if (pi < 0) return;
+  const activeEl = document.activeElement;
+  // Only intercept paste when not in an input/textarea/contenteditable
+  if (activeEl && (activeEl.isContentEditable || ['INPUT','TEXTAREA'].includes(activeEl.tagName))) return;
+  const items = Array.from(e.clipboardData?.items||[]);
+  const imgItem = items.find(it=>it.type.startsWith('image/'));
+  if (!imgItem) return;
+  e.preventDefault();
+  const file = imgItem.getAsFile(); if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const p = projects[pi]; if (!p) return;
+    if (!p.gallery) p.gallery = [];
+    const now = new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+    p.gallery.push({ id:'gi_'+Date.now(), src:ev.target.result, addedAt:now });
+    p._galleryHero = p.gallery.length - 1;
+    save('projects', projects); renderProjectDetail();
+  };
+  reader.readAsDataURL(file);
+});
+
+function openFigmaEmbed(url) {
+  // Convert Figma URL to embed URL
+  let embedUrl = url;
+  if (url.includes('figma.com/') && !url.includes('figma.com/embed')) {
+    embedUrl = 'https://www.figma.com/embed?embed_host=dashboard&url=' + encodeURIComponent(url);
+  }
+  let modal = document.getElementById('figma-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'figma-modal';
+    modal.className = 'figma-modal';
+    modal.innerHTML = `<div class="figma-modal-inner">
+      <button onclick="document.getElementById('figma-modal').style.display='none'" style="position:absolute;top:10px;right:10px;z-index:1;background:rgba(0,0,0,0.6);border:none;color:#fff;font-size:18px;width:32px;height:32px;border-radius:50%;cursor:pointer;line-height:1">×</button>
+      <iframe id="figma-iframe" allowfullscreen></iframe>
+    </div>`;
+    modal.addEventListener('click', e => { if (e.target === modal) modal.style.display = 'none'; });
+    document.body.appendChild(modal);
+  }
+  document.getElementById('figma-iframe').src = embedUrl;
+  modal.style.display = 'flex';
 }
 
 function addActionLog(pi) {
