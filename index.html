@@ -8103,6 +8103,14 @@ function saveCurrentWeek() {
 function switchScheduleWeek(wk) {
   // Guard: ignore invalid keys
   if (!/^\d{4}-\d{2}-\d{2}$/.test(wk) || isNaN(new Date(wk + 'T12:00:00').getTime())) return;
+  // If in baseline editing mode, exit it cleanly without a double-render
+  if (_editingBaseline) {
+    _editingBaseline = false;
+    _schedMode = 'week';
+    document.querySelectorAll('#routine-weekly-item,#routine-workouts-item').forEach(el => el.classList.remove('routine-active'));
+    document.getElementById('sched-normal-header').style.display = 'flex';
+    document.getElementById('sched-baseline-banner').style.display = 'none';
+  }
   // Save current before switching
   saveCurrentWeek();
   currentScheduleWeek = wk;
