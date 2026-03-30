@@ -7906,10 +7906,13 @@ let scheduleHistory = {}; // { "2026-W13": { Monday: {...}, ... }, ... }
 let currentScheduleWeek = null;
 
 function getISOWeekKey(date) {
-  // Week key = the Sunday date of that week (YYYY-MM-DD)
+  // Week key = the Sunday date of that week (YYYY-MM-DD), always in LOCAL time
   const d = new Date(date);
-  d.setDate(d.getDate() - d.getDay());
-  return d.toISOString().slice(0,10);
+  d.setDate(d.getDate() - d.getDay()); // rewind to Sunday (local)
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 function getWeekStartDate(weekKey) {
@@ -7926,12 +7929,23 @@ function weekKeyToLabel(wk) {
 
 function loadScheduleHistory() {
   let raw = load('scheduleHistory', {});
-  // Purge any keys that aren't valid YYYY-MM-DD Sunday dates (e.g. old "2026-W13" format)
+  // Purge invalid keys (old ISO format, NaN dates)
   Object.keys(raw).forEach(wk => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(wk) || isNaN(new Date(wk + 'T12:00:00').getTime())) {
       delete raw[wk];
     }
   });
+  // Deduplicate: re-key everything through getISOWeekKey so UTC-derived keys collapse to local
+  const deduped = {};
+  Object.keys(raw).forEach(wk => {
+    const canonical = getISOWeekKey(new Date(wk + 'T12:00:00'));
+    // Keep data from whichever key sorts latest (most recent save wins)
+    if (!deduped[canonical] || wk > canonical) deduped[canonical] = raw[wk];
+  });
+  raw = deduped;
+  if (Object.keys(raw).length !== Object.keys(load('scheduleHistory',{})).length) {
+    save('scheduleHistory', raw);
+  }
   scheduleHistory = raw;
   // Ensure current week exists
   currentScheduleWeek = getISOWeekKey(new Date());
