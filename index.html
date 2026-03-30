@@ -622,6 +622,7 @@
   .day-task-del:hover { opacity: 1; color: #E74C3C; }
   .day-task-label[contenteditable] { outline: none; cursor: text; }
   .day-task-label[contenteditable]:focus { background: rgba(0,0,0,0.03); border-radius: 3px; }
+  .task-label-empty[contenteditable]:not(:focus)::before { content: 'tap to name…'; color: var(--ink3); font-style: italic; pointer-events: none; }
   .lets-go-btn { display:flex;align-items:center;gap:6px;padding:8px 16px;margin:12px 20px;border:1px dashed var(--border);border-radius:20px;background:transparent;cursor:pointer;font-size:12px;color:var(--ink2);font-family:var(--sans);transition:all 0.15s }
   .lets-go-btn:hover { border-color:var(--ink);color:var(--ink) }
 
@@ -2875,6 +2876,25 @@ function loadAll() {
     }
   });
   if (docsNeedSave) save('docs', docs);
+  // One-time cleanup: remove empty-text tasks that were rolled over
+  // (caused by a bug where Enter-created empty tasks got rolled to today)
+  if (!load('cleaned_empty_rolled_v1', false)) {
+    let cleaned = false;
+    taskDays.forEach(day => {
+      const before = day.tasks.length;
+      day.tasks = day.tasks.filter(t => {
+        // Remove if: has no text AND (is a rolled copy OR has no notes)
+        if (!t.text || !t.text.trim()) {
+          if (t.rolledFrom) return false; // drop empty rolled copies
+          if (!(t.body && t.body.replace(/<[^>]*>/g,'').trim())) return false; // drop empty no-notes tasks
+        }
+        return true;
+      });
+      if (day.tasks.length !== before) cleaned = true;
+    });
+    if (cleaned) save('taskDays', taskDays);
+    save('cleaned_empty_rolled_v1', true);
+  }
   rolloverTasks();
 }
 
@@ -3447,7 +3467,7 @@ function rolloverTasks() {
   taskDays.forEach(day => {
     if (day.date === today) return;
     day.tasks.forEach(t => {
-      if (!t.done) {
+      if (!t.done && t.text.trim()) { // only roll tasks that actually have text
         // Only roll if not already in today
         const alreadyRolled = todayCard.tasks.some(tt => tt.id === t.id);
         if (!alreadyRolled) {
@@ -3617,7 +3637,7 @@ function renderTaskRow(t, date) {
     <div style="display:flex;align-items:center;gap:10px;padding:9px 20px">
       <span class="drag-handle">⠿</span>
       <div class="day-task-check ${t.done?'done':''}" onclick="toggleDayTask('${date}','${t.id}')"></div>
-      <span class="day-task-label ${t.done?'done':''}" style="flex:1;min-width:60px;display:inline-block" ${!t.done?`contenteditable="true" data-date="${date}" data-id="${t.id}" onblur="saveTaskLabel('${date}','${t.id}',this)" onkeydown="taskLabelKey(event,'${date}','${t.id}')" onpaste="event.preventDefault();document.execCommand('insertText',false,event.clipboardData.getData('text/plain'))`:``}>${escHtml(t.text) || (t.rolledFrom ? '<span style="color:var(--ink3);font-style:italic;pointer-events:none">untitled task</span>' : '')}</span>
+      <span class="day-task-label ${t.done?'done':''} ${!t.text.trim()?'task-label-empty':''}" style="flex:1;min-width:80px" ${!t.done?`contenteditable="true" data-date="${date}" data-id="${t.id}" onblur="saveTaskLabel('${date}','${t.id}',this)" onkeydown="taskLabelKey(event,'${date}','${t.id}')" onpaste="event.preventDefault();document.execCommand('insertText',false,event.clipboardData.getData('text/plain'))`:``}>${escHtml(t.text)}</span>
       ${t.rolledFrom ? `<span class="day-task-rolled">↳ ${formatDayLabel(t.rolledFrom)}</span>` : ''}
       <button class="task-expand-btn${hasNotes?' has-notes':''}" onclick="toggleTaskNotes(this)" title="Notes">${expanded?'▴':'▾'}</button>
       <button class="day-task-del" onclick="deleteDayTask('${date}','${t.id}')">✕</button>
