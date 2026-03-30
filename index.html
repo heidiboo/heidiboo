@@ -3549,17 +3549,6 @@ function renderTaskDays() {
   if (!el) return;
   const today = todayKey();
 
-  // Purge stale empty tasks (no text, no notes) that shouldn't persist
-  let purged = false;
-  taskDays.forEach(day => {
-    const before = day.tasks.length;
-    day.tasks = day.tasks.filter(t =>
-      t.text.trim() || (t.body && t.body.replace(/<[^>]*>/g,'').trim())
-    );
-    if (day.tasks.length !== before) purged = true;
-  });
-  if (purged) save('taskDays', taskDays);
-
   if (!taskDays.find(d => d.date === today)) {
     taskDays.unshift({ date: today, tasks: [] });
     save('taskDays', taskDays);
@@ -3628,7 +3617,7 @@ function renderTaskRow(t, date) {
     <div style="display:flex;align-items:center;gap:10px;padding:9px 20px">
       <span class="drag-handle">⠿</span>
       <div class="day-task-check ${t.done?'done':''}" onclick="toggleDayTask('${date}','${t.id}')"></div>
-      <span class="day-task-label ${t.done?'done':''}" style="flex:1;min-width:60px;display:inline-block" ${!t.done?`contenteditable="true" data-date="${date}" data-id="${t.id}" onblur="saveTaskLabel('${date}','${t.id}',this)" onkeydown="taskLabelKey(event,'${date}','${t.id}')" onpaste="event.preventDefault();document.execCommand('insertText',false,event.clipboardData.getData('text/plain'))`:``}>${escHtml(t.text)}</span>
+      <span class="day-task-label ${t.done?'done':''}" style="flex:1;min-width:60px;display:inline-block" ${!t.done?`contenteditable="true" data-date="${date}" data-id="${t.id}" onblur="saveTaskLabel('${date}','${t.id}',this)" onkeydown="taskLabelKey(event,'${date}','${t.id}')" onpaste="event.preventDefault();document.execCommand('insertText',false,event.clipboardData.getData('text/plain'))`:``}>${escHtml(t.text) || (t.rolledFrom ? '<span style="color:var(--ink3);font-style:italic;pointer-events:none">untitled task</span>' : '')}</span>
       ${t.rolledFrom ? `<span class="day-task-rolled">↳ ${formatDayLabel(t.rolledFrom)}</span>` : ''}
       <button class="task-expand-btn${hasNotes?' has-notes':''}" onclick="toggleTaskNotes(this)" title="Notes">${expanded?'▴':'▾'}</button>
       <button class="day-task-del" onclick="deleteDayTask('${date}','${t.id}')">✕</button>
@@ -3842,16 +3831,21 @@ function taskLabelKey(e, date, id) {
     e.preventDefault();
     const text = e.currentTarget.textContent.trim();
     if (!text) {
-      // Empty task on Enter — delete it and focus the one above
-      const taskEl = e.currentTarget.closest('.day-task');
-      const list = taskEl?.parentElement;
-      const allTasks = list ? [...list.querySelectorAll('.day-task')] : [];
-      const idx = allTasks.indexOf(taskEl);
-      const prevTask = idx > 0 ? allTasks[idx - 1] : null;
-      deleteDayTask(date, id);
-      if (prevTask) {
-        const lbl = prevTask.querySelector('.day-task-label[contenteditable]');
-        if (lbl) { setTimeout(() => { lbl.focus(); placeCursorEnd(lbl); }, 60); }
+      // Only delete if the task has no notes either — otherwise just move on
+      const day = taskDays.find(d => d.date === date);
+      const t = day?.tasks.find(t => t.id === id);
+      const hasNotes = !!(t?.body && t.body.replace(/<[^>]*>/g,'').trim());
+      if (!hasNotes) {
+        const taskEl = e.currentTarget.closest('.day-task');
+        const list = taskEl?.parentElement;
+        const allTasks = list ? [...list.querySelectorAll('.day-task')] : [];
+        const idx = allTasks.indexOf(taskEl);
+        const prevTask = idx > 0 ? allTasks[idx - 1] : null;
+        deleteDayTask(date, id);
+        if (prevTask) {
+          const lbl = prevTask.querySelector('.day-task-label[contenteditable]');
+          if (lbl) { setTimeout(() => { lbl.focus(); placeCursorEnd(lbl); }, 60); }
+        }
       }
     } else {
       saveTaskLabel(date, id, e.currentTarget);
@@ -3864,18 +3858,13 @@ function taskLabelKey(e, date, id) {
 }
 
 function saveTaskLabel(date, id, el) {
+  // Guard: skip if element was detached by a re-render (blur fires on removal)
+  if (!el.isConnected) return;
   const day = taskDays.find(d => d.date === date); if (!day) return;
   const t = day.tasks.find(t => t.id === id); if (!t) return;
   const newText = el.textContent.trim();
-  // Auto-delete if left empty with no notes
-  if (!newText && !(t.body && t.body.replace(/<[^>]*>/g,'').trim())) {
-    day.tasks = day.tasks.filter(tt => tt.id !== id);
-    save('taskDays', taskDays);
-    renderTaskDays();
-    renderTodos();
-    renderFocusTodos();
-    return;
-  }
+  // Don't save or delete if empty — intentional deletion is handled by Enter key
+  if (!newText) return;
   if (newText !== t.text) {
     t.text = newText;
     save('taskDays', taskDays);
