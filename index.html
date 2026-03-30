@@ -3898,10 +3898,12 @@ function addFirstTask(date) {
   save('taskDays', taskDays);
   renderTaskDays();
   renderTodos();
-  setTimeout(() => {
+  // Use requestAnimationFrame + small delay so focus lands after browser
+  // redirects focus from the button click
+  requestAnimationFrame(() => setTimeout(() => {
     const lbl = document.querySelector(`.day-task[data-id="${newId}"] .day-task-label[contenteditable]`);
-    if (lbl) lbl.focus();
-  }, 60);
+    if (lbl) { lbl.focus(); placeCursorEnd(lbl); }
+  }, 50));
 }
 
 function addNextDayCard() {
