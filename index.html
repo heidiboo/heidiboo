@@ -620,9 +620,10 @@
   .day-task-rolled { font-size: 10px; color: var(--ink2); background: rgba(0,0,0,0.05); padding: 1px 7px; border-radius: 6px; }
   .day-task-del { background: none; border: none; color: var(--ink2); cursor: pointer; opacity: 0.25; font-size: 12px; }
   .day-task-del:hover { opacity: 1; color: #E74C3C; }
-  .day-add-row { display: flex; gap: 8px; padding: 10px 20px; border-top: 1px solid var(--border); }
-  .day-add-row input { flex: 1; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-family: var(--sans); font-size: 12px; background: var(--bg); color: var(--ink); outline: none; }
-  .day-add-row input:focus { border-color: var(--ink); }
+  .day-task-label[contenteditable] { outline: none; cursor: text; }
+  .day-task-label[contenteditable]:focus { background: rgba(0,0,0,0.03); border-radius: 3px; }
+  .lets-go-btn { display:flex;align-items:center;gap:6px;padding:8px 16px;margin:12px 20px;border:1px dashed var(--border);border-radius:20px;background:transparent;cursor:pointer;font-size:12px;color:var(--ink2);font-family:var(--sans);transition:all 0.15s }
+  .lets-go-btn:hover { border-color:var(--ink);color:var(--ink) }
 
   /* Docs */
   .docs-layout { display: grid; grid-template-columns: 200px 1fr; min-height: 60vh; }
@@ -1260,7 +1261,7 @@
   .day-task:hover .task-expand-btn.has-notes { opacity:1 }
   .task-notes-panel { padding:0 20px 8px 46px }
   .task-notes-editor { min-height:22px;font-size:13px;line-height:1.6;color:var(--ink2);outline:none;font-family:var(--sans);cursor:text }
-  .task-notes-editor:empty::before { content:'Add notes… (type / for commands)';color:var(--ink3);pointer-events:none;font-style:italic }
+  .task-notes-editor:empty::before { content:'';display:none }
   .task-notes-editor ul,.task-notes-editor ol { padding-left:20px;margin:2px 0 }
   .task-notes-editor li { margin:1px 0 }
   .task-img-thumb { width:60px;height:60px;object-fit:cover;border-radius:6px;cursor:pointer }
@@ -1778,7 +1779,10 @@
         <div class="sidebar-main">
           <div class="section-header" style="padding-bottom:16px">
             <div class="section-title" id="tasks-month-title">Tasks</div>
-            <button class="btn" onclick="generateWeeklyRecap()" style="font-size:12px;padding:6px 14px;border:1px solid var(--border);background:transparent;color:var(--ink2)">📋 Weekly Recap</button>
+            <div style="display:flex;gap:8px;align-items:center">
+              <button class="btn" onclick="addNextDayCard()" style="font-size:12px;padding:6px 14px;border:1px solid var(--border);background:transparent;color:var(--ink2)">+ Next Day</button>
+              <button class="btn" onclick="generateWeeklyRecap()" style="font-size:12px;padding:6px 14px;border:1px solid var(--border);background:transparent;color:var(--ink2)">📋 Weekly Recap</button>
+            </div>
           </div>
           <div id="tasks-days-list"></div>
         </div>
@@ -3601,12 +3605,7 @@ function renderTaskDays() {
         </div>
         <div class="day-task-list" id="tasklist-${day.date}" data-date="${day.date}">
           ${sorted.map(t => renderTaskRow(t, day.date)).join('')
-            || '<div style="padding:10px 20px;font-size:12px;color:var(--ink2)">No tasks</div>'}
-        </div>
-        <div class="day-add-row">
-          <input type="text" id="day-add-${day.date}" placeholder="${isToday?'Add a task for today...':'Add task to this day...'}"
-            onkeydown="if(event.key==='Enter')addPastDayTask('${day.date}')">
-          <button class="btn btn-primary" onclick="addPastDayTask('${day.date}')">+ Add</button>
+            || `<button class="lets-go-btn" onclick="addFirstTask('${day.date}')">✦ Let's get things done</button>`}
         </div>
       </div>`;
   }).join('');
@@ -3622,7 +3621,7 @@ function renderTaskRow(t, date) {
     <div style="display:flex;align-items:center;gap:10px;padding:9px 20px">
       <span class="drag-handle">⠿</span>
       <div class="day-task-check ${t.done?'done':''}" onclick="toggleDayTask('${date}','${t.id}')"></div>
-      <span class="day-task-label ${t.done?'done':''}" style="flex:1;min-width:0">${escHtml(t.text)}</span>
+      <span class="day-task-label ${t.done?'done':''}" style="flex:1;min-width:0" ${!t.done?`contenteditable="true" data-date="${date}" data-id="${t.id}" onblur="saveTaskLabel('${date}','${t.id}',this)" onkeydown="taskLabelKey(event,'${date}','${t.id}')" onpaste="event.preventDefault();document.execCommand('insertText',false,event.clipboardData.getData('text/plain'))`:``}>${escHtml(t.text)}</span>
       ${t.rolledFrom ? `<span class="day-task-rolled">↳ ${formatDayLabel(t.rolledFrom)}</span>` : ''}
       <button class="task-expand-btn${hasNotes?' has-notes':''}" onclick="toggleTaskNotes(this)" title="Notes">${expanded?'▴':'▾'}</button>
       <button class="day-task-del" onclick="deleteDayTask('${date}','${t.id}')">✕</button>
@@ -3829,6 +3828,103 @@ function addPastDayTask(date) {
     const newTask = document.querySelector(`.day-task[data-id="${newId}"] .task-notes-editor`);
     if (newTask) newTask.focus();
   }, 60);
+}
+
+function taskLabelKey(e, date, id) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const text = e.currentTarget.textContent.trim();
+    if (!text) {
+      // Empty task on Enter — delete it and focus the one above
+      const taskEl = e.currentTarget.closest('.day-task');
+      const list = taskEl?.parentElement;
+      const allTasks = list ? [...list.querySelectorAll('.day-task')] : [];
+      const idx = allTasks.indexOf(taskEl);
+      const prevTask = idx > 0 ? allTasks[idx - 1] : null;
+      deleteDayTask(date, id);
+      if (prevTask) {
+        const lbl = prevTask.querySelector('.day-task-label[contenteditable]');
+        if (lbl) { setTimeout(() => { lbl.focus(); placeCursorEnd(lbl); }, 60); }
+      }
+    } else {
+      saveTaskLabel(date, id, e.currentTarget);
+      addTaskAfter(date, id);
+    }
+  }
+  if (e.key === 'Escape') {
+    e.currentTarget.blur();
+  }
+}
+
+function saveTaskLabel(date, id, el) {
+  const day = taskDays.find(d => d.date === date); if (!day) return;
+  const t = day.tasks.find(t => t.id === id); if (!t) return;
+  const newText = el.textContent.trim();
+  if (newText !== t.text) {
+    t.text = newText;
+    save('taskDays', taskDays);
+    renderTodos();
+    renderFocusTodos();
+  }
+}
+
+function addTaskAfter(date, afterId) {
+  let day = taskDays.find(d => d.date === date);
+  if (!day) { day = { date, tasks: [] }; taskDays.push(day); }
+  const idx = day.tasks.findIndex(t => t.id === afterId);
+  const newId = 'task_' + Date.now();
+  const newTask = { id: newId, text: '', done: false };
+  if (idx >= 0) day.tasks.splice(idx + 1, 0, newTask);
+  else day.tasks.push(newTask);
+  save('taskDays', taskDays);
+  renderTaskDays();
+  renderTodos();
+  setTimeout(() => {
+    const lbl = document.querySelector(`.day-task[data-id="${newId}"] .day-task-label[contenteditable]`);
+    if (lbl) { lbl.focus(); placeCursorEnd(lbl); }
+  }, 60);
+}
+
+function addFirstTask(date) {
+  let day = taskDays.find(d => d.date === date);
+  if (!day) { day = { date, tasks: [] }; taskDays.push(day); }
+  const newId = 'task_' + Date.now();
+  day.tasks.push({ id: newId, text: '', done: false });
+  save('taskDays', taskDays);
+  renderTaskDays();
+  renderTodos();
+  setTimeout(() => {
+    const lbl = document.querySelector(`.day-task[data-id="${newId}"] .day-task-label[contenteditable]`);
+    if (lbl) lbl.focus();
+  }, 60);
+}
+
+function addNextDayCard() {
+  const pad = n => String(n).padStart(2, '0');
+  const toKey = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  const existingDates = new Set(taskDays.map(d => d.date));
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  let attempts = 0;
+  while (existingDates.has(toKey(d)) && attempts < 30) { d.setDate(d.getDate() + 1); attempts++; }
+  const newDate = toKey(d);
+  taskDays.push({ date: newDate, tasks: [] });
+  save('taskDays', taskDays);
+  activeTasksMonth = newDate.slice(0, 7);
+  renderTaskDays();
+  setTimeout(() => {
+    const el = document.getElementById('daycard-' + newDate);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 100);
+}
+
+function placeCursorEnd(el) {
+  const range = document.createRange();
+  const sel = window.getSelection();
+  range.selectNodeContents(el);
+  range.collapse(false);
+  sel.removeAllRanges();
+  sel.addRange(range);
 }
 
 function toggleDayTask(date, id) {
@@ -6305,25 +6401,42 @@ function renderProjectDetail() {
       </div>
     </div>
 
-    <!-- 2-col: Left = Kickoff + Docs list | Right = Figma preview + Action Log -->
-    <div style="display:flex;gap:24px;align-items:flex-start">
-      <!-- LEFT COLUMN -->
-      <div style="width:300px;flex-shrink:0;display:flex;flex-direction:column;gap:16px">
-        ${kickoffDoc ? `
-        <div>
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-            <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.1em;color:var(--ink2);text-transform:uppercase">Kickoff Recap</span>
-            <button onclick="openDoc('${kickoffDoc.id}')" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--ink2);font-family:var(--sans);padding:0">Open ↗</button>
+    <!-- Top row: Kickoff | Figma Preview | Docs — all same height via stretch -->
+    <div style="display:flex;gap:20px;align-items:stretch;margin-bottom:24px">
+
+      <!-- KICKOFF RECAP -->
+      ${kickoffDoc ? `
+      <div style="width:260px;flex-shrink:0;display:flex;flex-direction:column">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.1em;color:var(--ink2);text-transform:uppercase">Kickoff Recap</span>
+          <button onclick="openDoc('${kickoffDoc.id}')" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--ink2);font-family:var(--sans);padding:0">Open ↗</button>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;flex:1;overflow-y:auto">
+          ${kickoffSectionsHtml}
+        </div>
+      </div>` : ''}
+
+      <!-- FIGMA PREVIEW (same height as kickoff, ~65% of remaining width) -->
+      ${figmaEmbedUrl ? `
+      <div style="flex:2;min-width:0;display:flex;flex-direction:column">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;flex:1;display:flex;flex-direction:column">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 14px;cursor:pointer;user-select:none;flex-shrink:0" onclick="toggleFigmaCard(this)">
+            <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.1em;color:var(--ink2);text-transform:uppercase">🎨 Figma Preview</span>
+            <span style="font-size:11px;color:var(--ink3)">▾</span>
           </div>
-          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px">
-            ${kickoffSectionsHtml}
+          <div class="figma-card-body" style="flex:1;min-height:200px">
+            <iframe src="${escHtml(figmaEmbedUrl)}" style="width:100%;height:100%;border:none" allowfullscreen loading="lazy"></iframe>
           </div>
-        </div>` : ''}
-        <div>
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-            <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.1em;color:var(--ink2);text-transform:uppercase">Docs</span>
-            <button class="btn btn-primary" onclick="openProjectDocsPicker(${i})" style="font-size:11px;padding:4px 10px">+ Link</button>
-          </div>
+        </div>
+      </div>` : `<div style="flex:2;min-width:0"></div>`}
+
+      <!-- DOCS -->
+      <div style="flex:1;min-width:160px;max-width:200px;display:flex;flex-direction:column">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.1em;color:var(--ink2);text-transform:uppercase">Docs</span>
+          <button class="btn btn-primary" onclick="openProjectDocsPicker(${i})" style="font-size:11px;padding:4px 10px">+ Link</button>
+        </div>
+        <div style="flex:1;overflow-y:auto">
           ${projDocs.length ? projDocs.map(d => `
             <div onclick="openDoc('${d.id}')" style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer">
               <span style="font-size:15px;flex-shrink:0">📄</span>
@@ -6335,45 +6448,33 @@ function renderProjectDetail() {
           : `<div style="font-size:12px;color:var(--ink3);font-style:italic;padding:6px 0">No docs linked yet</div>`}
         </div>
       </div>
+    </div>
 
-      <!-- RIGHT COLUMN -->
-      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:16px">
-        ${figmaEmbedUrl ? `
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 14px;cursor:pointer;user-select:none" onclick="toggleFigmaCard(this)">
-            <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.1em;color:var(--ink2);text-transform:uppercase">🎨 Figma Preview</span>
-            <span style="font-size:11px;color:var(--ink3)">▾</span>
-          </div>
-          <div class="figma-card-body" style="height:220px">
-            <iframe src="${escHtml(figmaEmbedUrl)}" style="width:100%;height:100%;border:none" allowfullscreen loading="lazy"></iframe>
-          </div>
-        </div>` : ''}
-        <div>
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-            <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.1em;color:var(--ink2);text-transform:uppercase">Action Log</span>
-            <button id="action-log-toggle-btn" onclick="toggleActionLogInput(${i})" style="padding:4px 12px;border:1px solid var(--border);border-radius:20px;background:transparent;cursor:pointer;font-size:11px;color:var(--ink2);font-family:var(--sans)">+ Log</button>
-          </div>
-          <div id="action-log-input-area" style="display:none;margin-bottom:10px">
-            <textarea id="action-log-input" placeholder="Update, decision, blocker… (Enter to log)" rows="2"
-              style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:var(--sans);background:var(--bg);color:var(--ink);outline:none;resize:none;line-height:1.5;box-sizing:border-box"
-              onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();addActionLog(${i});}if(event.key==='Escape'){toggleActionLogInput(${i});}"></textarea>
-          </div>
-          <div id="action-log-list" style="max-height:340px;overflow-y:auto">
-            ${((p.actionLog||[]).slice().reverse()).map(entry => `
-              <div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)" data-log-id="${entry.id}">
-                <div style="flex-shrink:0;width:5px;height:5px;border-radius:50%;background:var(--ink3);margin-top:6px"></div>
-                <div style="flex:1;min-width:0">
-                  <div contenteditable="true" style="font-size:12px;color:var(--ink);line-height:1.5;white-space:pre-wrap;outline:none;cursor:text"
-                    onblur="editActionLog(${i},'${entry.id}',this.textContent.trim())"
-                    onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();this.blur();}"
-                  >${escHtml(entry.text)}</div>
-                  <div style="font-size:10px;color:var(--ink3);margin-top:2px;font-family:var(--mono)">${entry.ts}</div>
-                </div>
-                <button onclick="deleteActionLog(${i},'${entry.id}')" style="background:none;border:none;cursor:pointer;color:var(--ink3);font-size:13px;opacity:0;padding:2px 4px;align-self:flex-start;line-height:1;flex-shrink:0" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0'" title="Delete">×</button>
-              </div>`).join('')}
-            ${!(p.actionLog||[]).length ? '<div style="font-size:12px;color:var(--ink3);font-style:italic;padding:6px 0">No entries yet</div>' : ''}
-          </div>
-        </div>
+    <!-- ACTION LOG — full width, most recent at top -->
+    <div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.1em;color:var(--ink2);text-transform:uppercase">Action Log</span>
+        <button id="action-log-toggle-btn" onclick="toggleActionLogInput(${i})" style="padding:4px 12px;border:1px solid var(--border);border-radius:20px;background:transparent;cursor:pointer;font-size:11px;color:var(--ink2);font-family:var(--sans)">+ Log</button>
+      </div>
+      <div id="action-log-input-area" style="display:none;margin-bottom:10px">
+        <textarea id="action-log-input" placeholder="Update, decision, blocker… (Enter to log)" rows="2"
+          style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:var(--sans);background:var(--bg);color:var(--ink);outline:none;resize:none;line-height:1.5;box-sizing:border-box"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();addActionLog(${i});}if(event.key==='Escape'){toggleActionLogInput(${i});}"></textarea>
+      </div>
+      <div id="action-log-list" style="display:flex;flex-wrap:wrap;gap:0">
+        ${((p.actionLog||[]).slice().reverse()).map(entry => `
+          <div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);width:100%" data-log-id="${entry.id}">
+            <div style="flex-shrink:0;width:5px;height:5px;border-radius:50%;background:var(--ink3);margin-top:6px"></div>
+            <div style="flex:1;min-width:0">
+              <div contenteditable="true" style="font-size:12px;color:var(--ink);line-height:1.5;white-space:pre-wrap;outline:none;cursor:text"
+                onblur="editActionLog(${i},'${entry.id}',this.textContent.trim())"
+                onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();this.blur();}"
+              >${escHtml(entry.text)}</div>
+              <div style="font-size:10px;color:var(--ink3);margin-top:2px;font-family:var(--mono)">${entry.ts}</div>
+            </div>
+            <button onclick="deleteActionLog(${i},'${entry.id}')" style="background:none;border:none;cursor:pointer;color:var(--ink3);font-size:13px;opacity:0;padding:2px 4px;align-self:flex-start;line-height:1;flex-shrink:0" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0'" title="Delete">×</button>
+          </div>`).join('')}
+        ${!(p.actionLog||[]).length ? '<div style="font-size:12px;color:var(--ink3);font-style:italic;padding:6px 0">No entries yet</div>' : ''}
       </div>
     </div>
   `;
