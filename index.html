@@ -1229,6 +1229,30 @@
     background: rgba(0,0,0,0.01);
     display: flex; align-items: center;
   }
+  /* ── MEETING TOOL ── */
+  .meeting-overlay { position:fixed;inset:0;z-index:9500;background:var(--surface);display:flex;flex-direction:column; }
+  .meeting-header { display:flex;align-items:center;gap:12px;padding:14px 24px;border-bottom:1px solid var(--border);flex-shrink:0 }
+  .meeting-rec-dot { width:8px;height:8px;border-radius:50%;background:#E74C3C;animation:recpulse 1.2s ease-in-out infinite }
+  @keyframes recpulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .meeting-body { display:flex;flex:1;min-height:0;overflow:hidden }
+  .meeting-transcript { flex:1;display:flex;flex-direction:column;border-right:1px solid var(--border);overflow:hidden }
+  .meeting-transcript-scroll { flex:1;overflow-y:auto;padding:20px 24px;display:flex;flex-direction:column;gap:0 }
+  .meeting-segment { display:flex;gap:10px;padding:6px 0;border-radius:var(--radius-sm);transition:background 0.1s }
+  .meeting-segment:hover { background:rgba(0,0,0,0.03) }
+  .meeting-segment-time { font-size:10px;color:var(--ink3);font-family:var(--mono);width:42px;flex-shrink:0;padding-top:3px }
+  .meeting-segment-speaker { font-size:10px;font-weight:600;padding:2px 7px;border-radius:20px;flex-shrink:0;cursor:pointer;white-space:nowrap;align-self:flex-start;margin-top:1px }
+  .meeting-segment-text { font-size:13px;color:var(--ink);line-height:1.5;flex:1;outline:none;cursor:text }
+  .meeting-segment-text.interim { color:var(--ink3);font-style:italic }
+  .meeting-sidebar { width:300px;flex-shrink:0;display:flex;flex-direction:column;overflow:hidden }
+  .meeting-sidebar-section { flex:1;display:flex;flex-direction:column;overflow:hidden;padding:16px }
+  .meeting-ai-item { display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-bottom:1px solid var(--border) }
+  .meeting-ai-check { width:14px;height:14px;border:1.5px solid var(--border);border-radius:3px;flex-shrink:0;cursor:pointer;margin-top:2px }
+  .meeting-ai-check.done { background:var(--ink);border-color:var(--ink) }
+  .meeting-pip { position:fixed;bottom:20px;right:20px;z-index:9600;background:var(--ink);color:#fff;border-radius:12px;padding:10px 16px;display:none;align-items:center;gap:10px;box-shadow:0 4px 20px rgba(0,0,0,0.3);cursor:pointer;font-family:var(--sans) }
+  .meeting-preview { position:fixed;inset:0;z-index:9700;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center }
+  .meeting-preview-inner { background:var(--surface);border-radius:var(--radius);width:680px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,0.2) }
+  .meeting-preview-body { flex:1;overflow-y:auto;padding:24px 28px;display:flex;flex-direction:column;gap:18px }
+
   .sched-time-arrow { font-family: var(--mono); font-size: 9px; color: var(--ink3); padding: 0 3px; }
 
   /* Click-to-add inline slot */
@@ -1518,6 +1542,7 @@
         <button class="nav-btn" onclick="showTab('projects',this)" ondblclick="closeProject()">Projects</button>
         <button class="nav-btn" onclick="showTab('docs',this)">Docs</button>
         <button class="nav-btn" onclick="showTab('schedule',this)">Schedule</button>
+        <button class="nav-btn" id="fullscreen-btn" onclick="toggleFullscreen()" title="Toggle fullscreen" style="margin-left:auto;font-size:13px">⛶</button>
       </nav>
     </div>
     <div class="header-right">
@@ -2796,6 +2821,11 @@ function loadAll() {
     docFolders.push({ id: 'folder_templates', name: 'Templates', icon: '📋' });
     save('docFolders', docFolders);
   }
+  // Seed Meetings folder if it doesn't exist
+  if (!docFolders.find(f => f.id === 'folder_meetings')) {
+    docFolders.unshift({ id: 'folder_meetings', name: 'Meetings', icon: '🎙️' });
+    save('docFolders', docFolders);
+  }
   // Seed Project Kickoff template if no templates exist yet
   if (!docs.find(d => d.folder === 'folder_templates')) {
     const now = new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
@@ -3661,7 +3691,8 @@ function isTemplatesFolder() { return currentFolder === TEMPLATES_FOLDER_ID; }
 function selectFolder(id) {
   currentFolder = id;
   const btn = document.getElementById('docs-new-btn');
-  if (btn) btn.textContent = isTemplatesFolder() ? '+ New Template' : '+ New Doc';
+  if (btn) btn.textContent = isTemplatesFolder() ? '+ New Template' : currentFolder === 'folder_meetings' ? '🎙 New Meeting' : '+ New Doc';
+  if (btn) btn.onclick = (currentFolder === 'folder_meetings') ? () => startNewMeeting() : () => openDoc(null);
   // Update sidebar highlights
   document.querySelectorAll('.docs-folder-item').forEach(el => el.classList.remove('active'));
   const target = document.getElementById(id === 'trash' ? 'folder-trash' : id === 'all' ? 'folder-all' : 'folder-' + id);
@@ -5999,7 +6030,7 @@ function buildKickoffCard(doc) {
       ${lines || '<div style="font-size:11px;color:var(--ink3);font-style:italic">—</div>'}
     </div>`;
   }).join('');
-  return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;width:240px;flex-shrink:0;align-self:flex-start">
+  return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;width:300px;flex-shrink:0;align-self:flex-start">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
       <span style="font-size:10px;font-weight:700;font-family:var(--mono);letter-spacing:0.09em;color:var(--ink);text-transform:uppercase">Kickoff Recap</span>
       <button onclick="openDoc('${doc.id}')" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--ink2);font-family:var(--sans);padding:0;line-height:1">Open ↗</button>
@@ -6099,6 +6130,29 @@ function renderProjectDetail() {
         : `<div class="empty-state">No docs linked yet — click Link Docs to attach existing docs or create a new one</div>`}
       </div>
     </div>
+
+    <!-- Action Log -->
+    <div style="margin-top:32px;padding-top:24px;border-top:1px solid var(--border)">
+      <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.1em;color:var(--ink2);text-transform:uppercase;margin-bottom:14px">Action Log</div>
+      <div style="display:flex;gap:8px;margin-bottom:16px">
+        <textarea id="action-log-input" placeholder="Add an update, decision, or note…" rows="2"
+          style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:var(--sans);background:var(--bg);color:var(--ink);outline:none;resize:none;line-height:1.5"
+          onkeydown="if((event.metaKey||event.ctrlKey)&&event.key==='Enter'){event.preventDefault();addActionLog(${i});}"></textarea>
+        <button onclick="addActionLog(${i})" class="btn btn-primary" style="align-self:flex-end;padding:8px 16px;font-size:12px">Log</button>
+      </div>
+      <div id="action-log-list">
+        ${((p.actionLog||[]).slice().reverse()).map(entry => `
+          <div style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)" data-log-id="${entry.id}">
+            <div style="flex-shrink:0;width:6px;height:6px;border-radius:50%;background:var(--ink3);margin-top:6px"></div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:12px;color:var(--ink);line-height:1.5;white-space:pre-wrap">${escHtml(entry.text)}</div>
+              <div style="font-size:10px;color:var(--ink3);margin-top:3px;font-family:var(--mono)">${entry.ts}</div>
+            </div>
+            <button onclick="deleteActionLog(${i},'${entry.id}')" style="background:none;border:none;cursor:pointer;color:var(--ink3);font-size:13px;opacity:0;padding:0;align-self:flex-start;line-height:1" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0'" title="Delete">×</button>
+          </div>`).join('')}
+        ${!(p.actionLog||[]).length ? '<div style="font-size:12px;color:var(--ink3);font-style:italic">No entries yet — log updates, decisions, or blockers here</div>' : ''}
+      </div>
+    </div>
   `;
 }
 
@@ -6180,6 +6234,311 @@ function removeProjLink(pi, li) {
   const p = projects[pi];
   if (!p) return;
   p.links.splice(li, 1);
+  save('projects', projects);
+  renderProjectDetail();
+}
+
+// ── MEETING TOOL ──
+const MEETINGS_FOLDER_ID = 'folder_meetings';
+const SPEAKER_COLORS = ['#3B82F6','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC4899','#06B6D4'];
+let _meeting = { id:null, title:'', startTime:null, endTime:null, segments:[], actionItems:[], notes:'', speakers:[] };
+let _meetingRecording = false;
+let _meetingMinimized = false;
+let _meetingTimerInterval = null;
+let _speechRec = null;
+let _interimIdx = -1;
+let _previewActionItems = [];
+
+function startNewMeeting() {
+  _meeting = {
+    id: 'meet_'+Date.now(), title:'Untitled Meeting', startTime:new Date(),
+    endTime:null, segments:[], actionItems:[], notes:'', speakers:[]
+  };
+  // Seed one speaker slot
+  _meeting.speakers = [{ id:'spk_0', name:'Me', color:SPEAKER_COLORS[0] }];
+  _meetingRecording = true;
+  _meetingMinimized = false;
+  _interimIdx = -1;
+  document.getElementById('meeting-overlay').style.display = 'flex';
+  document.getElementById('meeting-title-input').value = 'Untitled Meeting';
+  document.getElementById('meeting-transcript-scroll').innerHTML = '';
+  document.getElementById('meeting-action-items').innerHTML = '';
+  document.getElementById('meeting-notes-input').value = '';
+  _startMeetingTimer();
+  _startSpeechRec();
+}
+
+function _startMeetingTimer() {
+  clearInterval(_meetingTimerInterval);
+  _meetingTimerInterval = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - _meeting.startTime.getTime()) / 1000);
+    const mm = String(Math.floor(elapsed/60)).padStart(2,'0');
+    const ss = String(elapsed%60).padStart(2,'0');
+    const label = mm+':'+ss;
+    const t = document.getElementById('meeting-timer');
+    const pt = document.getElementById('meeting-pip-timer');
+    if (t) t.textContent = label;
+    if (pt) pt.textContent = label;
+  }, 1000);
+}
+
+function _startSpeechRec() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    const s = document.getElementById('meeting-speech-status');
+    if (s) s.textContent = '⚠ Speech recognition not supported in this browser';
+    return;
+  }
+  _speechRec = new SR();
+  _speechRec.continuous = true;
+  _speechRec.interimResults = true;
+  _speechRec.lang = 'en-US';
+  const status = document.getElementById('meeting-speech-status');
+  if (status) status.textContent = '● Listening';
+
+  _speechRec.onresult = (ev) => {
+    const results = Array.from(ev.results);
+    const interim = results.filter(r=>!r.isFinal).map(r=>r[0].transcript).join('');
+    const finals  = results.filter(r=>r.isFinal).map(r=>r[0].transcript);
+
+    finals.forEach(text => {
+      if (!text.trim()) return;
+      const spk = _meeting.speakers[0] || { id:'spk_0', name:'', color:'#888' };
+      const elapsed = Math.floor((Date.now() - _meeting.startTime.getTime()) / 1000);
+      const ts = String(Math.floor(elapsed/60)).padStart(2,'0')+':'+String(elapsed%60).padStart(2,'0');
+      const seg = { id:'seg_'+Date.now(), text:text.trim(), speaker:spk.id, ts, interim:false };
+      _meeting.segments.push(seg);
+      _checkAutoActionItem(text.trim(), seg.id);
+      _interimIdx = -1;
+    });
+    renderMeetingTranscript(interim);
+  };
+  _speechRec.onerror = (ev) => {
+    if (status) status.textContent = '⚠ '+ev.error;
+  };
+  _speechRec.onend = () => {
+    // Auto-restart if still recording
+    if (_meetingRecording) {
+      try { _speechRec.start(); } catch(e) {}
+    }
+  };
+  try { _speechRec.start(); } catch(e) {}
+}
+
+function renderMeetingTranscript(interimText) {
+  const el = document.getElementById('meeting-transcript-scroll');
+  if (!el) return;
+  const segs = _meeting.segments.map(s => {
+    const spk = _meeting.speakers.find(sp=>sp.id===s.speaker);
+    const spkHtml = spk
+      ? `<span class="meeting-segment-speaker" style="background:${spk.color}22;color:${spk.color}" onclick="cycleSpeaker('${s.id}')">${spk.name||'Speaker'}</span>`
+      : `<span class="meeting-segment-speaker" style="background:#eee;color:#888" onclick="cycleSpeaker('${s.id}')">?</span>`;
+    return `<div class="meeting-segment" data-seg-id="${s.id}">
+      <span class="meeting-segment-time">${s.ts}</span>
+      ${spkHtml}
+      <span class="meeting-segment-text" contenteditable="true" onblur="editSegmentText('${s.id}',this.textContent)">${escHtml(s.text)}</span>
+    </div>`;
+  }).join('');
+  const interimHtml = interimText
+    ? `<div class="meeting-segment"><span class="meeting-segment-time"></span><span class="meeting-segment-text interim">${escHtml(interimText)}</span></div>`
+    : '';
+  el.innerHTML = segs + interimHtml;
+  el.scrollTop = el.scrollHeight;
+}
+
+function editSegmentText(segId, text) {
+  const seg = _meeting.segments.find(s=>s.id===segId);
+  if (seg) seg.text = text.trim();
+}
+
+function cycleSpeaker(segId) {
+  const seg = _meeting.segments.find(s=>s.id===segId);
+  if (!seg || !_meeting.speakers.length) return;
+  const idx = _meeting.speakers.findIndex(sp=>sp.id===seg.speaker);
+  seg.speaker = _meeting.speakers[(idx+1) % _meeting.speakers.length].id;
+  renderMeetingTranscript('');
+}
+
+function addMeetingSpeaker() {
+  const name = prompt('Speaker name:');
+  if (!name?.trim()) return;
+  const idx = _meeting.speakers.length;
+  _meeting.speakers.push({ id:'spk_'+Date.now(), name:name.trim(), color:SPEAKER_COLORS[idx % SPEAKER_COLORS.length] });
+}
+
+function _checkAutoActionItem(text, segId) {
+  const patterns = [/\bwill\b.{2,40}/i, /\bneed[s]? to\b.{2,40}/i, /\baction item\b.{0,60}/i, /\bfollow.?up\b.{0,40}/i, /\btodo\b.{0,40}/i, /\bsend\b.{2,40}/i, /\breview\b.{2,40}/i, /\bschedule\b.{2,40}/i];
+  const matched = patterns.find(p=>p.test(text));
+  if (!matched) return;
+  const match = text.match(matched);
+  if (!match) return;
+  addMeetingActionItem(match[0].trim(), true);
+}
+
+function addMeetingActionItem(text, auto) {
+  if (typeof text !== 'string') text = '';
+  text = text.trim(); if (!text) return;
+  const inp = document.getElementById('meeting-ai-input');
+  if (inp && !auto) { inp.value = ''; }
+  _meeting.actionItems.push({ id:'ai_'+Date.now(), text, done:false, auto:!!auto });
+  renderMeetingActionItems();
+}
+
+function renderMeetingActionItems() {
+  const el = document.getElementById('meeting-action-items');
+  if (!el) return;
+  el.innerHTML = _meeting.actionItems.map((it,i) => `
+    <div class="meeting-ai-item">
+      <div class="meeting-ai-check${it.done?' done':''}" onclick="_meeting.actionItems[${i}].done=!_meeting.actionItems[${i}].done;renderMeetingActionItems()"></div>
+      <div style="flex:1;font-size:12px;color:var(--ink);line-height:1.4;cursor:text;outline:none" contenteditable="true" onblur="_meeting.actionItems[${i}].text=this.textContent.trim()">${escHtml(it.text)}</div>
+      <button onclick="_meeting.actionItems.splice(${i},1);renderMeetingActionItems()" style="background:none;border:none;cursor:pointer;color:var(--ink3);font-size:12px;padding:0;line-height:1">×</button>
+    </div>`).join('');
+}
+
+function minimizeMeeting() {
+  _meetingMinimized = true;
+  document.getElementById('meeting-overlay').style.display = 'none';
+  document.getElementById('meeting-pip').style.display = 'flex';
+}
+
+function restoreMeeting() {
+  _meetingMinimized = false;
+  document.getElementById('meeting-overlay').style.display = 'flex';
+  document.getElementById('meeting-pip').style.display = 'none';
+}
+
+function endMeeting() {
+  _meetingRecording = false;
+  _meeting.endTime = new Date();
+  _meeting.title = document.getElementById('meeting-title-input')?.value?.trim() || 'Untitled Meeting';
+  _meeting.notes = document.getElementById('meeting-notes-input')?.value || '';
+  if (_speechRec) { try { _speechRec.stop(); } catch(e) {} _speechRec = null; }
+  clearInterval(_meetingTimerInterval);
+  document.getElementById('meeting-overlay').style.display = 'none';
+  document.getElementById('meeting-pip').style.display = 'none';
+  _showMeetingPreview();
+}
+
+function _showMeetingPreview() {
+  const m = _meeting;
+  const duration = m.endTime && m.startTime
+    ? Math.floor((m.endTime - m.startTime) / 60000) + 'm'
+    : '';
+  const dateStr = m.startTime
+    ? m.startTime.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})
+    : '';
+
+  document.getElementById('preview-title').value = m.title;
+  document.getElementById('preview-meta').textContent = dateStr + (duration ? '  ·  ' + duration : '');
+  document.getElementById('preview-summary').value = '';
+  document.getElementById('preview-notes').value = m.notes;
+
+  // Transcript
+  const transcriptText = m.segments.map(s => {
+    const spk = m.speakers.find(sp=>sp.id===s.speaker);
+    return `[${s.ts}] ${spk?.name||'Speaker'}: ${s.text}`;
+  }).join('\n');
+  document.getElementById('preview-transcript').textContent = transcriptText;
+
+  // Action items
+  _previewActionItems = m.actionItems.map(it => ({...it}));
+  renderPreviewActionItems();
+  document.getElementById('meeting-preview').style.display = 'flex';
+}
+
+function renderPreviewActionItems() {
+  const el = document.getElementById('preview-action-items');
+  if (!el) return;
+  el.innerHTML = _previewActionItems.map((it,i) => `
+    <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)">
+      <div style="width:13px;height:13px;border:1.5px solid var(--border);border-radius:3px;flex-shrink:0"></div>
+      <input type="text" value="${escHtml(it.text)}" onchange="_previewActionItems[${i}].text=this.value"
+        style="flex:1;border:none;background:transparent;font-size:12px;font-family:var(--sans);color:var(--ink);outline:none;padding:2px 0">
+      <button onclick="_previewActionItems.splice(${i},1);renderPreviewActionItems()" style="background:none;border:none;cursor:pointer;color:var(--ink3);font-size:13px;padding:0">×</button>
+    </div>`).join('');
+}
+
+function addPreviewActionItem(text) {
+  text = (typeof text === 'string' ? text : '').trim(); if (!text) return;
+  _previewActionItems.push({ id:'ai_'+Date.now(), text, done:false });
+  renderPreviewActionItems();
+  const inp = document.getElementById('preview-ai-input');
+  if (inp) inp.value = '';
+}
+
+function closeMeetingPreview() {
+  document.getElementById('meeting-preview').style.display = 'none';
+  _meeting = { id:null, title:'', startTime:null, endTime:null, segments:[], actionItems:[], notes:'', speakers:[] };
+  _previewActionItems = [];
+}
+
+function saveMeetingDoc() {
+  const title   = document.getElementById('preview-title')?.value?.trim() || 'Untitled Meeting';
+  const summary = document.getElementById('preview-summary')?.value?.trim() || '';
+  const notes   = document.getElementById('preview-notes')?.value?.trim() || '';
+  const m = _meeting;
+  const dateStr = m.startTime
+    ? m.startTime.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
+    : new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  const duration = m.endTime && m.startTime
+    ? Math.floor((m.endTime - m.startTime) / 60000) + ' min'
+    : '';
+
+  // Build doc body HTML
+  let body = `<h2>${escHtml(title)}</h2>`;
+  body += `<p><strong>Date:</strong> ${escHtml(dateStr)}${duration ? ' &nbsp;·&nbsp; <strong>Duration:</strong> ' + escHtml(duration) : ''}</p>`;
+  if (m.speakers.length) body += `<p><strong>Speakers:</strong> ${m.speakers.map(s=>escHtml(s.name)).join(', ')}</p>`;
+  if (summary) body += `<h3>Summary</h3><p>${escHtml(summary).replace(/\n/g,'<br>')}</p>`;
+  if (_previewActionItems.length) {
+    body += `<h3>Action Items</h3><ul>${_previewActionItems.map(it=>`<li>${escHtml(it.text)}</li>`).join('')}</ul>`;
+  }
+  if (notes) body += `<h3>Notes</h3><p>${escHtml(notes).replace(/\n/g,'<br>')}</p>`;
+  if (m.segments.length) {
+    body += `<h3>Transcript</h3>`;
+    body += m.segments.map(s => {
+      const spk = m.speakers.find(sp=>sp.id===s.speaker);
+      return `<p><strong>[${s.ts}] ${escHtml(spk?.name||'Speaker')}:</strong> ${escHtml(s.text)}</p>`;
+    }).join('');
+  }
+
+  // Ensure meetings folder exists
+  if (!docFolders.find(f=>f.id===MEETINGS_FOLDER_ID)) {
+    docFolders.unshift({ id:MEETINGS_FOLDER_ID, name:'Meetings', icon:'🎙️' });
+    save('docFolders', docFolders);
+  }
+
+  const doc = {
+    id: 'doc_'+Date.now(), title, body, project:'',
+    folder: MEETINGS_FOLDER_ID, tags:['meeting'],
+    cover:'', createdAt:dateStr, updatedAt:dateStr, updatedTs:Date.now()
+  };
+  docs.push(doc); save('docs', docs);
+  closeMeetingPreview();
+  selectFolder(MEETINGS_FOLDER_ID);
+  renderDocs(); renderFolders();
+  showTab('docs', document.querySelector('.nav-btn[onclick*="docs"]'));
+  openDoc(doc.id);
+}
+
+function addActionLog(pi) {
+  const p = projects[pi]; if (!p) return;
+  const inp = document.getElementById('action-log-input');
+  const text = (inp?.value || '').trim(); if (!text) return;
+  if (!p.actionLog) p.actionLog = [];
+  const now = new Date();
+  const ts = now.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) + ' · ' +
+    now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true});
+  p.actionLog.push({ id: 'log_'+Date.now(), text, ts });
+  save('projects', projects);
+  inp.value = '';
+  renderProjectDetail();
+  // Scroll log into view
+  document.getElementById('action-log-list')?.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function deleteActionLog(pi, logId) {
+  const p = projects[pi]; if (!p || !p.actionLog) return;
+  p.actionLog = p.actionLog.filter(e => e.id !== logId);
   save('projects', projects);
   renderProjectDetail();
 }
@@ -7147,6 +7506,21 @@ function pomoRender() {
   const sess = document.getElementById('pomo-sessions');
   if (sess) sess.textContent = `${pomoSessions} session${pomoSessions !== 1 ? 's' : ''} today`;
 }
+
+function toggleFullscreen() {
+  const btn = document.getElementById('fullscreen-btn');
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(() => {});
+    if (btn) btn.textContent = '⊡';
+  } else {
+    document.exitFullscreen().catch(() => {});
+    if (btn) btn.textContent = '⛶';
+  }
+}
+document.addEventListener('fullscreenchange', () => {
+  const btn = document.getElementById('fullscreen-btn');
+  if (btn) btn.textContent = document.fullscreenElement ? '⊡' : '⛶';
+});
 
 // ---- SIDEBAR TOGGLE ----
 function toggleSidebar(tab) {
@@ -8283,5 +8657,92 @@ function init() {
   pomoRender();
 }
 </script>
+
+  <!-- MEETING OVERLAY -->
+  <div id="meeting-overlay" class="meeting-overlay" style="display:none">
+    <div class="meeting-header">
+      <div class="meeting-rec-dot"></div>
+      <input id="meeting-title-input" value="Untitled Meeting" style="font-size:15px;font-weight:600;font-family:var(--mono);border:none;background:transparent;outline:none;color:var(--ink);flex:1">
+      <span id="meeting-timer" style="font-size:13px;font-family:var(--mono);color:var(--ink2);min-width:52px">00:00</span>
+      <button onclick="addMeetingSpeaker()" style="padding:5px 12px;border:1px solid var(--border);border-radius:20px;background:transparent;cursor:pointer;font-size:12px;font-family:var(--sans);color:var(--ink2)">+ Speaker</button>
+      <button onclick="minimizeMeeting()" style="padding:5px 12px;border:1px solid var(--border);border-radius:20px;background:transparent;cursor:pointer;font-size:12px;font-family:var(--sans);color:var(--ink2)">Minimize</button>
+      <button onclick="endMeeting()" style="padding:5px 16px;border-radius:20px;background:#E74C3C;border:none;cursor:pointer;font-size:12px;font-family:var(--sans);color:#fff;font-weight:600">End Meeting</button>
+    </div>
+    <div class="meeting-body">
+      <div class="meeting-transcript">
+        <div style="padding:10px 24px 4px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px;flex-shrink:0">
+          <span style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;font-family:var(--mono);color:var(--ink2)">Live Transcript</span>
+          <span id="meeting-speech-status" style="font-size:10px;color:var(--ink3);margin-left:auto"></span>
+        </div>
+        <div class="meeting-transcript-scroll" id="meeting-transcript-scroll"></div>
+      </div>
+      <div class="meeting-sidebar">
+        <div class="meeting-sidebar-section" style="border-bottom:1px solid var(--border)">
+          <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;font-family:var(--mono);color:var(--ink2);margin-bottom:10px;flex-shrink:0">Action Items</div>
+          <div id="meeting-action-items" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:0"></div>
+          <div style="display:flex;gap:6px;margin-top:8px;flex-shrink:0">
+            <input id="meeting-ai-input" type="text" placeholder="Add action item…" style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:var(--sans);background:var(--bg);color:var(--ink);outline:none"
+              onkeydown="if(event.key==='Enter')addMeetingActionItem(document.getElementById('meeting-ai-input').value)">
+            <button onclick="addMeetingActionItem(document.getElementById('meeting-ai-input').value)" style="padding:6px 10px;border-radius:var(--radius-sm);background:var(--ink);color:#fff;border:none;cursor:pointer;font-size:12px">+</button>
+          </div>
+        </div>
+        <div class="meeting-sidebar-section">
+          <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;font-family:var(--mono);color:var(--ink2);margin-bottom:10px;flex-shrink:0">Notes</div>
+          <textarea id="meeting-notes-input" placeholder="Type notes here…" style="flex:1;resize:none;border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px;font-size:12px;font-family:var(--sans);background:var(--bg);color:var(--ink);outline:none;width:100%;box-sizing:border-box;min-height:120px"></textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MEETING PIP -->
+  <div class="meeting-pip" id="meeting-pip" onclick="restoreMeeting()">
+    <div class="meeting-rec-dot"></div>
+    <span id="meeting-pip-timer" style="font-size:13px;font-family:var(--mono)">00:00</span>
+    <span style="font-size:12px;opacity:0.7">Recording</span>
+    <button onclick="event.stopPropagation();endMeeting()" style="background:rgba(255,255,255,0.2);border:none;color:#fff;cursor:pointer;font-size:11px;padding:3px 8px;border-radius:10px">End</button>
+  </div>
+
+  <!-- MEETING PREVIEW MODAL -->
+  <div id="meeting-preview" class="meeting-preview" style="display:none">
+    <div class="meeting-preview-inner">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 24px;border-bottom:1px solid var(--border);flex-shrink:0">
+        <span style="font-size:14px;font-weight:600">Meeting Recap Preview</span>
+        <div style="display:flex;gap:8px">
+          <button onclick="closeMeetingPreview()" style="padding:7px 16px;border:1px solid var(--border);border-radius:var(--radius-sm);background:transparent;cursor:pointer;font-size:12px;color:var(--ink2);font-family:var(--sans)">Discard</button>
+          <button onclick="saveMeetingDoc()" class="btn btn-primary" style="padding:7px 16px;font-size:12px">Save to Docs</button>
+        </div>
+      </div>
+      <div class="meeting-preview-body">
+        <div>
+          <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;font-family:var(--mono);color:var(--ink2);margin-bottom:6px">Title</div>
+          <input id="preview-title" type="text" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:14px;font-weight:600;font-family:var(--mono);background:var(--bg);color:var(--ink);outline:none;box-sizing:border-box">
+        </div>
+        <div id="preview-meta" style="font-size:12px;color:var(--ink2);font-family:var(--mono)"></div>
+        <div>
+          <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;font-family:var(--mono);color:var(--ink2);margin-bottom:6px">Summary</div>
+          <textarea id="preview-summary" rows="4" placeholder="Add a summary…" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:var(--sans);background:var(--bg);color:var(--ink);outline:none;resize:vertical;box-sizing:border-box;line-height:1.5"></textarea>
+        </div>
+        <div>
+          <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;font-family:var(--mono);color:var(--ink2);margin-bottom:8px">Action Items</div>
+          <div id="preview-action-items"></div>
+          <div style="display:flex;gap:6px;margin-top:8px">
+            <input id="preview-ai-input" type="text" placeholder="Add action item…" style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:var(--sans);background:var(--bg);color:var(--ink);outline:none"
+              onkeydown="if(event.key==='Enter')addPreviewActionItem(this.value)">
+            <button onclick="addPreviewActionItem(document.getElementById('preview-ai-input').value)" style="padding:6px 10px;border-radius:var(--radius-sm);background:var(--ink);color:#fff;border:none;cursor:pointer;font-size:12px">+</button>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;font-family:var(--mono);color:var(--ink2);margin-bottom:6px">Additional Notes</div>
+          <textarea id="preview-notes" rows="3" placeholder="Any additional notes…" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:var(--sans);background:var(--bg);color:var(--ink);outline:none;resize:vertical;box-sizing:border-box;line-height:1.5"></textarea>
+        </div>
+        <div>
+          <details>
+            <summary style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;font-family:var(--mono);color:var(--ink2);cursor:pointer;margin-bottom:8px">Full Transcript</summary>
+            <div id="preview-transcript" style="font-size:12px;color:var(--ink2);line-height:1.7;padding:12px;border:1px solid var(--border);border-radius:var(--radius-sm);white-space:pre-wrap;max-height:220px;overflow-y:auto;font-family:var(--mono)"></div>
+          </details>
+        </div>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
