@@ -1258,14 +1258,11 @@
   .day-task:hover .task-expand-btn { opacity:0.5 }
   .task-expand-btn.has-notes { opacity:0.5 }
   .day-task:hover .task-expand-btn.has-notes { opacity:1 }
-  .task-notes-panel { padding:0 20px 10px 46px }
-  .task-fmt-bar { display:flex;gap:1px;margin-bottom:5px;padding-bottom:5px;border-bottom:1px solid var(--border) }
-  .task-fmt-btn { background:none;border:none;cursor:pointer;padding:2px 7px;font-size:11px;color:var(--ink2);border-radius:3px;line-height:1.4;font-family:var(--sans) }
-  .task-fmt-btn:hover { background:rgba(0,0,0,0.07);color:var(--ink) }
-  .task-notes-editor { min-height:48px;font-size:13px;line-height:1.6;color:var(--ink);outline:none;font-family:var(--sans) }
-  .task-notes-editor ul,.task-notes-editor ol { padding-left:20px;margin:3px 0 }
+  .task-notes-panel { padding:0 20px 8px 46px }
+  .task-notes-editor { min-height:22px;font-size:13px;line-height:1.6;color:var(--ink2);outline:none;font-family:var(--sans);cursor:text }
+  .task-notes-editor:empty::before { content:'Add notes… (type / for commands)';color:var(--ink3);pointer-events:none;font-style:italic }
+  .task-notes-editor ul,.task-notes-editor ol { padding-left:20px;margin:2px 0 }
   .task-notes-editor li { margin:1px 0 }
-  .task-notes-editor b,.task-notes-editor strong { font-weight:600 }
   .task-img-thumb { width:60px;height:60px;object-fit:cover;border-radius:6px;cursor:pointer }
   /* ── PROJECT GALLERY ── */
   .proj-gallery-hero { width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:var(--radius);cursor:pointer;display:block;background:var(--surface);border:1px solid var(--border) }
@@ -3631,22 +3628,11 @@ function renderTaskRow(t, date) {
       <button class="day-task-del" onclick="deleteDayTask('${date}','${t.id}')">✕</button>
     </div>
     <div class="task-notes-panel" style="display:${expanded?'block':'none'}">
-      <div class="task-fmt-bar">
-        <button class="task-fmt-btn" onmousedown="event.preventDefault();taskFmt(this,'bold')"><b>B</b></button>
-        <button class="task-fmt-btn" onmousedown="event.preventDefault();taskFmt(this,'italic')"><i>I</i></button>
-        <button class="task-fmt-btn" onmousedown="event.preventDefault();taskFmt(this,'underline')"><u>U</u></button>
-        <div style="width:1px;background:var(--border);margin:0 3px;align-self:stretch"></div>
-        <button class="task-fmt-btn" onmousedown="event.preventDefault();taskFmt(this,'insertUnorderedList')">• List</button>
-        <button class="task-fmt-btn" onmousedown="event.preventDefault();taskFmt(this,'insertOrderedList')">1. List</button>
-        <div style="width:1px;background:var(--border);margin:0 3px;align-self:stretch"></div>
-        <button class="task-fmt-btn" onmousedown="event.preventDefault();taskFmt(this,'formatBlock','<h3>')">H3</button>
-        <button class="task-fmt-btn" onmousedown="event.preventDefault();taskFmt(this,'strikeThrough')"><s>S</s></button>
-        <button class="task-fmt-btn" onmousedown="event.preventDefault();taskFmt(this,'removeFormat')" style="margin-left:auto;font-size:10px;opacity:0.7">clear</button>
-      </div>
       <div class="task-notes-editor" contenteditable="true" data-date="${date}" data-id="${t.id}"
         onblur="saveTaskNotesHTML(this)"
         onkeydown="taskNotesKey(event)"
-      >${t.body || '<p><br></p>'}</div>
+        oninput="taskNotesInput(this)"
+      >${t.body || ''}</div>
     </div>
   </div>`;
 }
@@ -3669,14 +3655,36 @@ function toggleTaskNotes(btn) {
   }
 }
 
-function taskFmt(btn, cmd, val) {
-  const editor = btn.closest('.task-notes-panel').querySelector('.task-notes-editor');
-  editor.focus();
-  document.execCommand(cmd, false, val || null);
+function taskNotesInput(el) {
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return;
+  const range = sel.getRangeAt(0);
+  const text = range.startContainer.textContent || '';
+  const slashIdx = text.lastIndexOf('/');
+  if (slashIdx >= 0) {
+    slashQuery = text.slice(slashIdx + 1).toLowerCase();
+    slashRange = range.cloneRange();
+    showSlashMenu(range);
+  } else {
+    hideSlashMenu();
+  }
 }
 
 function taskNotesKey(e) {
-  // Escape collapses the notes
+  const menu = document.getElementById('slash-menu');
+  const menuOpen = menu && menu.style.display !== 'none';
+  if (menuOpen) {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const items = menu.querySelectorAll('.slash-item');
+      if (!items.length) return;
+      slashActive = e.key === 'ArrowDown' ? Math.min(slashActive+1, items.length-1) : Math.max(slashActive-1, 0);
+      items.forEach((el, idx) => el.classList.toggle('active', idx === slashActive));
+      return;
+    }
+    if (e.key === 'Enter') { e.preventDefault(); const active = menu.querySelector('.slash-item.active'); if (active) execSlash(active.dataset.cmd); return; }
+    if (e.key === 'Escape') { e.preventDefault(); hideSlashMenu(); return; }
+  }
   if (e.key === 'Escape') {
     e.currentTarget.blur();
     const btn = e.currentTarget.closest('.day-task')?.querySelector('.task-expand-btn');
@@ -5087,7 +5095,7 @@ function setupEditor() {
   });
 
   document.addEventListener('click', function(e) {
-    if (!e.target.closest('#slash-menu') && !e.target.closest('#doc-body-input')) hideSlashMenu();
+    if (!e.target.closest('#slash-menu') && !e.target.closest('#doc-body-input') && !e.target.closest('.task-notes-editor')) hideSlashMenu();
     if (!e.target.closest('#mention-menu') && !e.target.closest('#doc-body-input')) hideMentionMenu();
     if (!e.target.closest('#bookmark-popup')) { /* keep open */ }
   });
@@ -6233,36 +6241,9 @@ function renderProjectDetail() {
   const projDocs = docs.filter(d => d.project === p.name);
   const kickoffDoc = projDocs.find(d => /kickoff/i.test(d.title));
   const kickoffSectionsHtml = kickoffDoc ? buildKickoffSections(kickoffDoc) : '';
+  const figmaLink = p.links?.find(l => /figma/i.test(l.label) && l.url?.trim());
+  const figmaEmbedUrl = figmaLink ? 'https://www.figma.com/embed?embed_host=dashboard&url=' + encodeURIComponent(figmaLink.url) : '';
   const el = document.getElementById('proj-detail-content');
-  // Gallery
-  const gallery = p.gallery || [];
-  const heroIdx = p._galleryHero ?? (gallery.length > 0 ? gallery.length - 1 : -1);
-  const figmaLink = p.links?.find(l => /figma/i.test(l.label) && l.url);
-  const galleryHtml = `
-    <div style="margin-bottom:28px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.1em;color:var(--ink2);text-transform:uppercase">Gallery</div>
-        <div style="display:flex;gap:6px">
-          ${figmaLink ? `<button onclick="openFigmaEmbed('${escHtml(figmaLink.url)}')" style="padding:4px 10px;border:1px solid var(--border);border-radius:20px;background:transparent;cursor:pointer;font-size:11px;color:var(--ink2);font-family:var(--sans)">🎨 Preview Figma</button>` : ''}
-          <label style="padding:4px 10px;border:1px dashed var(--border);border-radius:20px;cursor:pointer;font-size:11px;color:var(--ink2);font-family:var(--sans)">+ Add screenshot
-            <input type="file" accept="image/*" multiple style="display:none" onchange="addGalleryImages(${i},this)">
-          </label>
-        </div>
-      </div>
-      ${gallery.length ? `
-        <img src="${gallery[heroIdx]?.src}" class="proj-gallery-hero" onclick="openGalleryLightbox(${i},${heroIdx})" style="margin-bottom:8px">
-        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-          ${gallery.map((g,gi) => `<div style="position:relative">
-            <img src="${g.src}" class="proj-gallery-thumb${gi===heroIdx?' active':''}" onclick="setGalleryHero(${i},${gi})" title="${escHtml(g.addedAt||'')}">
-            <button onclick="removeGalleryImg(${i},${gi})" style="position:absolute;top:-4px;right:-4px;background:var(--ink);color:#fff;border:none;border-radius:50%;width:15px;height:15px;font-size:9px;cursor:pointer;line-height:1;padding:0;display:none" class="gallery-del-btn">×</button>
-          </div>`).join('')}
-        </div>` : `
-        <label class="proj-gallery-drop" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="handleGalleryDrop(${i},event)">
-          <div style="font-size:20px;margin-bottom:6px">🖼</div>
-          Paste or drag screenshots here, or click to upload
-          <input type="file" accept="image/*" multiple style="display:none" onchange="addGalleryImages(${i},this)">
-        </label>`}
-    </div>`;
 
   const linkChips = p.links.map((l, li) => {
     const hasUrl = l.url && l.url.trim();
@@ -6315,10 +6296,8 @@ function renderProjectDetail() {
       </div>
     </div>
 
-    ${galleryHtml}
-
     <!-- Quick Links -->
-    <div style="margin-bottom:28px">
+    <div style="margin-bottom:24px">
       <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.1em;color:var(--ink2);text-transform:uppercase;margin-bottom:10px">Quick Links</div>
       <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
         ${linkChips}
@@ -6326,58 +6305,76 @@ function renderProjectDetail() {
       </div>
     </div>
 
-    <!-- Kickoff + Action Log — aligned headers -->
-    <div style="display:flex;gap:24px;align-items:flex-start;margin-bottom:28px">
-      ${kickoffDoc ? `<div style="width:300px;flex-shrink:0">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;min-height:28px">
-          <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.1em;color:var(--ink2);text-transform:uppercase">Kickoff Recap</span>
-          <button onclick="openDoc('${kickoffDoc.id}')" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--ink2);font-family:var(--sans);padding:0;line-height:1">Open ↗</button>
-        </div>
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px">
-          ${kickoffSectionsHtml}
-        </div>
-      </div>` : ''}
-      <div style="flex:1;min-width:0">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;min-height:28px">
-          <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.1em;color:var(--ink2);text-transform:uppercase">Action Log</span>
-          <button id="action-log-toggle-btn" onclick="toggleActionLogInput(${i})" style="padding:4px 12px;border:1px solid var(--border);border-radius:20px;background:transparent;cursor:pointer;font-size:11px;color:var(--ink2);font-family:var(--sans)">+ Log</button>
-        </div>
-        <div id="action-log-input-area" style="display:none;margin-bottom:12px">
-          <textarea id="action-log-input" placeholder="Update, decision, blocker… (Enter to log)" rows="2" autofocus
-            style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:var(--sans);background:var(--bg);color:var(--ink);outline:none;resize:none;line-height:1.5;box-sizing:border-box"
-            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();addActionLog(${i});}if(event.key==='Escape'){toggleActionLogInput(${i});}"></textarea>
-        </div>
-        <div id="action-log-list" style="max-height:300px;overflow-y:auto">
-          ${((p.actionLog||[]).slice().reverse()).map(entry => `
-            <div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)" data-log-id="${entry.id}">
-              <div style="flex-shrink:0;width:6px;height:6px;border-radius:50%;background:var(--ink3);margin-top:5px"></div>
+    <!-- 2-col: Left = Kickoff + Docs list | Right = Figma preview + Action Log -->
+    <div style="display:flex;gap:24px;align-items:flex-start">
+      <!-- LEFT COLUMN -->
+      <div style="width:300px;flex-shrink:0;display:flex;flex-direction:column;gap:16px">
+        ${kickoffDoc ? `
+        <div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.1em;color:var(--ink2);text-transform:uppercase">Kickoff Recap</span>
+            <button onclick="openDoc('${kickoffDoc.id}')" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--ink2);font-family:var(--sans);padding:0">Open ↗</button>
+          </div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px">
+            ${kickoffSectionsHtml}
+          </div>
+        </div>` : ''}
+        <div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.1em;color:var(--ink2);text-transform:uppercase">Docs</span>
+            <button class="btn btn-primary" onclick="openProjectDocsPicker(${i})" style="font-size:11px;padding:4px 10px">+ Link</button>
+          </div>
+          ${projDocs.length ? projDocs.map(d => `
+            <div onclick="openDoc('${d.id}')" style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer">
+              <span style="font-size:15px;flex-shrink:0">📄</span>
               <div style="flex:1;min-width:0">
-                <div contenteditable="true" style="font-size:12px;color:var(--ink);line-height:1.5;white-space:pre-wrap;outline:none;cursor:text"
-                  onblur="editActionLog(${i},'${entry.id}',this.textContent.trim())"
-                  onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();this.blur();}">
-                  ${escHtml(entry.text)}</div>
-                <div style="font-size:10px;color:var(--ink3);margin-top:2px;font-family:var(--mono)">${entry.ts}</div>
+                <div style="font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink)">${escHtml(d.title||'Untitled')}</div>
+                <div style="font-size:10px;color:var(--ink3)">${d.updatedAt||''}</div>
               </div>
-              <button onclick="deleteActionLog(${i},'${entry.id}')" style="background:none;border:none;cursor:pointer;color:var(--ink3);font-size:13px;opacity:0;padding:2px 4px;align-self:flex-start;line-height:1;flex-shrink:0" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0'" title="Delete">×</button>
-            </div>`).join('')}
-          ${!(p.actionLog||[]).length ? '<div style="font-size:12px;color:var(--ink3);font-style:italic;padding:8px 0">No entries yet</div>' : ''}
+            </div>`).join('')
+          : `<div style="font-size:12px;color:var(--ink3);font-style:italic;padding:6px 0">No docs linked yet</div>`}
         </div>
       </div>
-    </div>
 
-    <!-- Docs -->
-    <div style="border-top:1px solid var(--border);padding-top:24px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-        <div style="font-family:var(--mono);font-size:11px;letter-spacing:0.08em;color:var(--ink2);text-transform:uppercase">Docs // ${projDocs.length}</div>
-        <button class="btn btn-primary" onclick="openProjectDocsPicker(${i})" style="font-size:12px;padding:6px 14px">+ Link Docs</button>
+      <!-- RIGHT COLUMN -->
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:16px">
+        ${figmaEmbedUrl ? `
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 14px;cursor:pointer;user-select:none" onclick="toggleFigmaCard(this)">
+            <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.1em;color:var(--ink2);text-transform:uppercase">🎨 Figma Preview</span>
+            <span style="font-size:11px;color:var(--ink3)">▾</span>
+          </div>
+          <div class="figma-card-body" style="height:220px">
+            <iframe src="${escHtml(figmaEmbedUrl)}" style="width:100%;height:100%;border:none" allowfullscreen loading="lazy"></iframe>
+          </div>
+        </div>` : ''}
+        <div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.1em;color:var(--ink2);text-transform:uppercase">Action Log</span>
+            <button id="action-log-toggle-btn" onclick="toggleActionLogInput(${i})" style="padding:4px 12px;border:1px solid var(--border);border-radius:20px;background:transparent;cursor:pointer;font-size:11px;color:var(--ink2);font-family:var(--sans)">+ Log</button>
+          </div>
+          <div id="action-log-input-area" style="display:none;margin-bottom:10px">
+            <textarea id="action-log-input" placeholder="Update, decision, blocker… (Enter to log)" rows="2"
+              style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:var(--sans);background:var(--bg);color:var(--ink);outline:none;resize:none;line-height:1.5;box-sizing:border-box"
+              onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();addActionLog(${i});}if(event.key==='Escape'){toggleActionLogInput(${i});}"></textarea>
+          </div>
+          <div id="action-log-list" style="max-height:340px;overflow-y:auto">
+            ${((p.actionLog||[]).slice().reverse()).map(entry => `
+              <div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)" data-log-id="${entry.id}">
+                <div style="flex-shrink:0;width:5px;height:5px;border-radius:50%;background:var(--ink3);margin-top:6px"></div>
+                <div style="flex:1;min-width:0">
+                  <div contenteditable="true" style="font-size:12px;color:var(--ink);line-height:1.5;white-space:pre-wrap;outline:none;cursor:text"
+                    onblur="editActionLog(${i},'${entry.id}',this.textContent.trim())"
+                    onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();this.blur();}"
+                  >${escHtml(entry.text)}</div>
+                  <div style="font-size:10px;color:var(--ink3);margin-top:2px;font-family:var(--mono)">${entry.ts}</div>
+                </div>
+                <button onclick="deleteActionLog(${i},'${entry.id}')" style="background:none;border:none;cursor:pointer;color:var(--ink3);font-size:13px;opacity:0;padding:2px 4px;align-self:flex-start;line-height:1;flex-shrink:0" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0'" title="Delete">×</button>
+              </div>`).join('')}
+            ${!(p.actionLog||[]).length ? '<div style="font-size:12px;color:var(--ink3);font-style:italic;padding:6px 0">No entries yet</div>' : ''}
+          </div>
+        </div>
       </div>
-      ${projDocs.length ? `<div class="docs-grid">${projDocs.map(d => `
-        <div class="doc-card" onclick="openDoc('${d.id}')">
-          <div class="doc-card-title">${escHtml(d.title || 'Untitled')}</div>
-          <div class="doc-card-preview">${escHtml((d.body||'').replace(/<[^>]*>/g,'').slice(0,100))}</div>
-          <div class="doc-card-meta"><span>${d.updatedAt || ''}</span></div>
-        </div>`).join('')}</div>`
-      : `<div class="empty-state">No docs linked yet — click Link Docs to attach existing docs or create a new one</div>`}
     </div>
   `;
 }
@@ -6878,6 +6875,15 @@ function openFigmaEmbed(url) {
   }
   document.getElementById('figma-iframe').src = embedUrl;
   modal.style.display = 'flex';
+}
+
+function toggleFigmaCard(headerEl) {
+  const body = headerEl.nextElementSibling;
+  const chevron = headerEl.querySelector('span:last-child');
+  if (!body) return;
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'block';
+  if (chevron) chevron.textContent = isOpen ? '▸' : '▾';
 }
 
 function toggleActionLogInput(pi) {
