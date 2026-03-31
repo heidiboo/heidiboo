@@ -7059,8 +7059,9 @@ function addActionLog(pi) {
 
 function editActionLog(pi, logId, newText) {
   const p = projects[pi]; if (!p || !p.actionLog) return;
+  if (!newText) { deleteActionLog(pi, logId); return; }
   const entry = p.actionLog.find(e => e.id === logId);
-  if (entry && newText && newText !== entry.text) {
+  if (entry && newText !== entry.text) {
     entry.text = newText;
     save('projects', projects);
   }
