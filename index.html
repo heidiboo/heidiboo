@@ -1506,23 +1506,20 @@
 
     <!-- Clock row — Layout C -->
     <div class="focus-clock-row">
-      <!-- Left: clock OR big pomo ring when running -->
+      <!-- Left: clock (always visible) -->
       <div class="focus-clock-left">
-        <!-- Clock content (hidden while pomo runs) -->
-        <div id="focus-clock-content">
-          <div class="focus-label" id="focus-greeting">good morning</div>
-          <div class="focus-clock" id="focus-time">—<span class="f-ampm"></span></div>
-          <div class="focus-datestr" id="focus-date">—</div>
-          <div class="focus-week-row" id="focus-week"></div>
+        <div class="focus-label" id="focus-greeting">good morning</div>
+        <div class="focus-clock" id="focus-time">—<span class="f-ampm"></span></div>
+        <div class="focus-datestr" id="focus-date">—</div>
+        <div class="focus-week-row" id="focus-week"></div>
+      </div>
+      <!-- Middle: big ring (shown while pomo runs, sits left of divider line) -->
+      <div id="pomo-big-wrap" style="display:none;flex-direction:column;align-items:center;gap:10px;padding-right:24px">
+        <div class="pomo-ring-xl" onclick="pomoToggle()">
+          <svg width="160" height="160" viewBox="0 0 160 160"><circle class="pomo-track" cx="80" cy="80" r="70" style="stroke-width:3.5"/><circle class="pomo-progress" id="pomo-big-progress" cx="80" cy="80" r="70" style="stroke-width:3.5;stroke-dasharray:440;stroke-dashoffset:440;transition:stroke-dashoffset 1s linear"/></svg>
+          <div class="pomo-time-xl" id="pomo-big-display">25:00</div>
         </div>
-        <!-- Big ring (shown while pomo runs) -->
-        <div id="pomo-big-wrap" style="display:none;flex-direction:column;align-items:flex-start;gap:10px">
-          <div class="pomo-ring-xl" onclick="pomoToggle()">
-            <svg width="160" height="160" viewBox="0 0 160 160"><circle class="pomo-track" cx="80" cy="80" r="70" style="stroke-width:3.5"/><circle class="pomo-progress" id="pomo-big-progress" cx="80" cy="80" r="70" style="stroke-width:3.5;stroke-dasharray:440;stroke-dashoffset:440;transition:stroke-dashoffset 1s linear"/></svg>
-            <div class="pomo-time-xl" id="pomo-big-display">25:00</div>
-          </div>
-          <div class="pomo-label" id="pomo-big-label" style="font-size:8px;letter-spacing:0.14em">FOCUS</div>
-        </div>
+        <div class="pomo-label" id="pomo-big-label" style="font-size:8px;letter-spacing:0.14em">FOCUS</div>
       </div>
       <!-- Right panel: timer controls OR motivational, divider, actions -->
       <div class="focus-right-panel">
@@ -8090,6 +8087,7 @@ function pomoToggle() {
         pomoRunning = false;
         pomoLeft = 0;
         pomoUpdateLayout();
+        playDing();
         if (pomoMode === 'focus') {
           pomoSessions++;
           save('pomoSessions', pomoSessions);
@@ -8129,19 +8127,34 @@ function setPomoQuote() {
 
 function pomoUpdateLayout() {
   const running = pomoRunning;
-  const clockContent  = document.getElementById('focus-clock-content');
-  const bigWrap       = document.getElementById('pomo-big-wrap');
-  const smallSection  = document.getElementById('pomo-small-section');
-  const motivational  = document.getElementById('pomo-motivational');
-  if (clockContent) clockContent.style.display  = running ? 'none' : '';
-  if (bigWrap)      bigWrap.style.display        = running ? 'flex' : 'none';
-  if (smallSection) smallSection.style.display   = running ? 'none' : '';
-  if (motivational) motivational.style.display   = running ? 'flex' : 'none';
+  const bigWrap      = document.getElementById('pomo-big-wrap');
+  const smallSection = document.getElementById('pomo-small-section');
+  const motivational = document.getElementById('pomo-motivational');
+  if (bigWrap)      bigWrap.style.display      = running ? 'flex' : 'none';
+  if (smallSection) smallSection.style.display = running ? 'none' : '';
+  if (motivational) motivational.style.display = running ? 'flex' : 'none';
   if (running) {
     const labels = { focus:'Focus', short:'Short break', long:'Long break' };
     const bl = document.getElementById('pomo-big-label');
     if (bl) bl.textContent = labels[pomoMode] || '';
   }
+}
+
+function playDing() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(660, ctx.currentTime + 0.4);
+    gain.gain.setValueAtTime(0.25, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.8);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 1.8);
+  } catch(e) {}
 }
 
 function pomoRender() {
