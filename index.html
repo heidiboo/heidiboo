@@ -3713,6 +3713,17 @@ function taskNotesKey(e) {
     if (e.key === 'Enter') { e.preventDefault(); const active = menu.querySelector('.slash-item.active'); if (active) execSlash(active.dataset.cmd); return; }
     if (e.key === 'Escape') { e.preventDefault(); hideSlashMenu(); return; }
   }
+  if (e.key === 'Backspace' && !e.currentTarget.textContent.trim()) {
+    e.preventDefault();
+    const taskEl = e.currentTarget.closest('.day-task');
+    const btn = taskEl?.querySelector('.task-expand-btn');
+    if (btn) toggleTaskNotes(btn);
+    setTimeout(() => {
+      const lbl = taskEl?.querySelector('.day-task-label[contenteditable]');
+      if (lbl) { lbl.focus(); placeCursorEnd(lbl); }
+    }, 30);
+    return;
+  }
   if (e.key === 'Escape') {
     e.currentTarget.blur();
     const btn = e.currentTarget.closest('.day-task')?.querySelector('.task-expand-btn');
@@ -3863,26 +3874,16 @@ function taskLabelKey(e, date, id) {
   if (e.key === 'Enter') {
     e.preventDefault();
     const text = e.currentTarget.textContent.trim();
-    if (!text) {
-      // Only delete if the task has no notes either — otherwise just move on
-      const day = taskDays.find(d => d.date === date);
-      const t = day?.tasks.find(t => t.id === id);
-      const hasNotes = !!(t?.body && t.body.replace(/<[^>]*>/g,'').trim());
-      if (!hasNotes) {
-        const taskEl = e.currentTarget.closest('.day-task');
-        const list = taskEl?.parentElement;
-        const allTasks = list ? [...list.querySelectorAll('.day-task')] : [];
-        const idx = allTasks.indexOf(taskEl);
-        const prevTask = idx > 0 ? allTasks[idx - 1] : null;
-        deleteDayTask(date, id);
-        if (prevTask) {
-          const lbl = prevTask.querySelector('.day-task-label[contenteditable]');
-          if (lbl) { setTimeout(() => { lbl.focus(); placeCursorEnd(lbl); }, 60); }
-        }
-      }
-    } else {
+    if (text) {
+      // Has text: save + new task checkbox below
       saveTaskLabel(date, id, e.currentTarget);
       addTaskAfter(date, id);
+    } else {
+      // Empty task: open the blank text line (notes panel) below
+      const taskEl = e.currentTarget.closest('.day-task');
+      const btn = taskEl?.querySelector('.task-expand-btn');
+      if (btn) toggleTaskNotes(btn);
+      // toggleTaskNotes already focuses the notes editor
     }
   }
   if (e.key === 'Escape') {
