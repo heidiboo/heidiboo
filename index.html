@@ -3886,6 +3886,20 @@ function taskLabelKey(e, date, id) {
       // toggleTaskNotes already focuses the notes editor
     }
   }
+  if (e.key === 'Backspace' && !e.currentTarget.textContent.trim()) {
+    e.preventDefault();
+    const taskEl = e.currentTarget.closest('.day-task');
+    const list = taskEl?.parentElement;
+    const allTasks = list ? [...list.querySelectorAll('.day-task')] : [];
+    const idx = allTasks.indexOf(taskEl);
+    const prevTask = idx > 0 ? allTasks[idx - 1] : null;
+    deleteDayTask(date, id);
+    if (prevTask) {
+      const lbl = prevTask.querySelector('.day-task-label[contenteditable]');
+      if (lbl) setTimeout(() => { lbl.focus(); placeCursorEnd(lbl); }, 60);
+    }
+    return;
+  }
   if (e.key === 'Escape') {
     e.currentTarget.blur();
   }
