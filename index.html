@@ -1210,7 +1210,7 @@
 
   /* Resize handles */
   .sblock-resize {
-    position: absolute; left: 0; right: 0; height: 8px; z-index: 3;
+    position: absolute; left: 0; right: 0; height: 14px; z-index: 3;
     display: flex; align-items: center; justify-content: center;
     opacity: 0; transition: opacity 0.15s;
   }
@@ -8829,7 +8829,11 @@ function toggleAmPm(day){
 let _resizeState = null, _resizeRafId = null;
 function schedResizeStart(e, day, bi, edge) {
   e.preventDefault(); e.stopPropagation();
-  _resizeState = { day, bi, edge, lastHour: -1 };
+  const blockEl = e.currentTarget.closest('.sblock');
+  const block = scheduleData[day]?.blocks[bi];
+  _resizeState = { day, bi, edge, lastHour: -1, blockEl,
+    origStartM: block ? schedToMins(block.time) : 0,
+    origEndM:   block?.timeEnd ? schedToMins(block.timeEnd) : null };
   document.body.classList.add('resizing-block');
   document.body.style.cursor = edge === 'top' ? 'n-resize' : 's-resize';
   document.addEventListener('mousemove', schedResizeMove);
@@ -8841,7 +8845,7 @@ function schedResizeMove(e) {
   _resizeRafId = requestAnimationFrame(() => {
     _resizeRafId = null;
     if (!_resizeState) return;
-    const { day, bi, edge } = _resizeState;
+    const { day, bi, edge, blockEl } = _resizeState;
     const HOURS = [7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23];
     for (const h of HOURS) {
       const row = document.getElementById('shr-'+day+'-'+h);
@@ -8852,14 +8856,24 @@ function schedResizeMove(e) {
         _resizeState.lastHour = h;
         const block = scheduleData[day].blocks[bi];
         if (!block) return;
+        const hMins = h * 60;
         const period = h >= 12 ? 'PM' : 'AM';
         const dispH = h === 0 ? 12 : h > 12 ? h - 12 : h;
         const newTime = `${dispH}:00 ${period}`;
         if (edge === 'bottom') {
-          if (h * 60 > schedToMins(block.time)) { block.timeEnd = newTime; renderSchedule(); }
+          const startM = schedToMins(block.time);
+          if (hMins > startM) {
+            block.timeEnd = newTime;
+            // Live height update — no full re-render during drag
+            if (blockEl) blockEl.style.minHeight = ((hMins - startM) / 60 * 32) + 'px';
+          }
         } else {
-          const endMins = block.timeEnd ? schedToMins(block.timeEnd) : 9999;
-          if (h * 60 < endMins) { block.time = newTime; renderSchedule(); }
+          const endMins = block.timeEnd ? schedToMins(block.timeEnd) : (_resizeState.origEndM || 9999);
+          if (hMins < endMins) {
+            block.time = newTime;
+            // Live height update
+            if (blockEl && endMins < 9999) blockEl.style.minHeight = ((endMins - hMins) / 60 * 32) + 'px';
+          }
         }
         break;
       }
