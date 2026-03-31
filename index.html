@@ -8943,6 +8943,8 @@ let _resizeState = null, _resizeRafId = null;
 function schedResizeStart(e, day, bi, edge) {
   e.preventDefault(); e.stopPropagation();
   const blockEl = e.currentTarget.closest('.sblock');
+  // Disable native drag on the block so mousemove fires instead of dragover
+  if (blockEl) blockEl.draggable = false;
   const block = scheduleData[day]?.blocks[bi];
   _resizeState = { day, bi, edge, lastHour: -1, blockEl,
     origStartM: block ? schedToMins(block.time) : 0,
@@ -9000,7 +9002,10 @@ function schedResizeEnd() {
   document.body.classList.remove('resizing-block');
   document.body.style.cursor = '';
   if (_resizeRafId) { cancelAnimationFrame(_resizeRafId); _resizeRafId = null; }
-  saveSchedule(); saveCurrentWeek(); renderFocusSchedule(); renderDailyScheduleView();
+  // Restore native drag on the block
+  if (_resizeState.blockEl) _resizeState.blockEl.draggable = true;
+  saveSchedule(); saveCurrentWeek();
+  renderSchedule(); renderFocusSchedule(); renderDailyScheduleView();
   _resizeState = null;
 }
 function toggleEndAmPm(day){
