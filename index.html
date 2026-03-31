@@ -3273,6 +3273,11 @@ function saveTodoLabel(id, el) {
 }
 
 function todoLabelKey(e, id, listId) {
+  if (e.key === 'Backspace' && !e.currentTarget.textContent.trim()) {
+    e.preventDefault();
+    deleteTodoById(id);
+    return;
+  }
   if (e.key === 'Enter') {
     e.preventDefault();
     const text = e.currentTarget.textContent.trim();
