@@ -2115,7 +2115,7 @@
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', initAuth);
+document.addEventListener('DOMContentLoaded', () => { initAuth().catch(e => { console.error('initAuth failed:', e); showLoginScreen(); }); });
 
 // ---- FLOW CANVAS ----
 function initFlowCanvas(canvasId, numLines, slow) {
@@ -2231,7 +2231,20 @@ function initDate() { initClock(); }
 // ---- SUPABASE ----
 const SUPA_URL = 'https://rgkaayvzbrsfrtpcugaz.supabase.co';
 const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJna2FheXZ6YnJzZnJ0cGN1Z2F6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ1NTg3MjgsImV4cCI6MjA5MDEzNDcyOH0.E1s9_bsxckFg2TvxVKyoBt977j8N998bnJ-UYsmzmeg';
-const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
+let sb;
+try {
+  sb = supabase.createClient(SUPA_URL, SUPA_KEY);
+} catch(e) {
+  console.warn('Supabase CDN not loaded, running in offline mode:', e);
+  // Minimal stub so the rest of the script doesn't crash when CDN fails
+  sb = {
+    auth: {
+      getSession: async () => ({ data: { session: null }, error: null }),
+      signOut: async () => {},
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } })
+    }
+  };
+}
 
 // localStorage still used as fast local cache + offline fallback
 function saveLocal(key, val) { try { localStorage.setItem('dash_'+key, JSON.stringify(val)); } catch(e){} }
@@ -2680,20 +2693,34 @@ async function initAuth() {
         return;
       }
       window.history.replaceState(null, '', window.location.pathname);
+      localStorage.setItem('dash_authed', '1');
       showApp();
       return;
     }
   }
 
   // Check existing session
-  const { data: { session } } = await sb.auth.getSession();
+  let session = null;
+  try {
+    const { data } = await sb.auth.getSession();
+    session = data?.session || null;
+  } catch(e) {
+    console.warn('Supabase getSession failed:', e);
+  }
   if (session) {
     const userEmail = session.user.email?.toLowerCase();
     if (!ALL_HEIDI.includes(userEmail)) {
-      await sb.auth.signOut();
+      try { await sb.auth.signOut(); } catch(e) {}
       showLoginScreen('Access denied — this is a private space.');
       return;
     }
+    localStorage.setItem('dash_authed', '1');
+    showApp();
+    return;
+  }
+  // Supabase unreachable but user was previously authenticated — load from local cache
+  if (localStorage.getItem('dash_authed') === '1') {
+    console.warn('Supabase offline — loading from local cache');
     showApp();
     return;
   }
@@ -2708,6 +2735,7 @@ async function initAuth() {
         return;
       }
       window.history.replaceState(null, '', window.location.pathname);
+      localStorage.setItem('dash_authed', '1');
       showApp();
     }
   });
