@@ -115,6 +115,7 @@
     padding: 5px 0; border-bottom: 1px solid rgba(0,0,0,0.04);
   }
   .fs-block:last-child { border-bottom: none; }
+  .fs-block.past { opacity: 0.35; }
   .fs-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
   .fs-dot.gym     { background: #4ADE80; }
   .fs-dot.work    { background: #60A5FA; }
@@ -1402,6 +1403,7 @@
     position: relative;
   }
   .ds-block:last-child { border-bottom: none; }
+  .ds-block.past { opacity: 0.35; }
   .ds-time {
     font-family: var(--mono); font-size: 10px; color: var(--ink3);
     min-width: 60px; flex-shrink: 0;
@@ -8654,6 +8656,7 @@ function renderSchedule() {
 
   wrap.innerHTML = orderedDays.map(day => {
     const d = scheduleData[day];
+    if (!d) return '';
     const isToday = day === todayName;
     const hasWorkout = Array.isArray(d.workout);
     const dayDate = getDayDate(day);
@@ -8905,12 +8908,18 @@ function renderFocusSchedule() {
 
   const all = d.blocks;
 
-  el.innerHTML = all.map(b => `
-    <div class="fs-block">
+  const nowMins = new Date().getHours() * 60 + new Date().getMinutes();
+  el.innerHTML = all.map(b => {
+    const startM = schedToMins(b.time);
+    const endM = b.timeEnd ? schedToMins(b.timeEnd) : (startM < 9999 ? startM + 60 : 9999);
+    const past = startM < 9999 && endM < nowMins;
+    return `
+    <div class="fs-block${past?' past':''}">
       <span class="fs-time">${escHtml(b.time)}</span>
       <div class="fs-dot ${b.type}"></div>
       <span class="fs-label${b.type==='work'?' work-block':''}">${escHtml(b.label)}</span>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function saveBlockEdit(day,idx,field,val){ scheduleData[day].blocks[idx][field]=val; saveSchedule(); saveCurrentWeek(); }
@@ -9177,12 +9186,18 @@ function renderDailyScheduleView() {
 
   const sorted = allBlocks.slice().sort((a, b) => schedToMins(a.time) - schedToMins(b.time));
 
-  const html = sorted.map(b => `
-    <div class="ds-block">
+  const nowMins2 = new Date().getHours() * 60 + new Date().getMinutes();
+  const html = sorted.map(b => {
+    const startM = schedToMins(b.time);
+    const endM = b.timeEnd ? schedToMins(b.timeEnd) : startM + 60;
+    const past = endM < nowMins2;
+    return `
+    <div class="ds-block${past?' past':''}">
       <span class="ds-time">${escHtml(b.time)}</span>
       <div class="ds-dot ${b.type}"></div>
       <span class="ds-label${b.isWork ? '" style="color:var(--ink2)' : ''}">${escHtml(b.label)}</span>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 
   el.innerHTML = `<div class="daily-sched-timeline">${html}</div>`;
 }
@@ -9379,8 +9394,8 @@ function init() {
   loadSchedule();
   loadScheduleHistory();
   renderAll();
-  renderSchedule();
-  renderDailyScheduleView();
+  try { renderSchedule(); } catch(e) { console.error('renderSchedule:', e); }
+  try { renderDailyScheduleView(); } catch(e) { console.error('renderDailyScheduleView:', e); }
   renderFocusSchedule();
   initMode();
   initFlowCanvas('flow-canvas', 8, true);
