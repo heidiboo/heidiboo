@@ -2722,7 +2722,7 @@ async function initAuth() {
   // Supabase unreachable but user was previously authenticated — load from local cache
   if (localStorage.getItem('dash_authed') === '1') {
     console.warn('Supabase offline — loading from local cache');
-    showApp();
+    showApp(true); // offlineMode: skip loadFromSupabase so it can't wipe local data
     return;
   }
 
@@ -2771,17 +2771,20 @@ function showLoginScreen(errorMsg) {
  5. Replace YOUR_SERVICE_ID, YOUR_TEMPLATE_ID, YOUR_PUBLIC_KEY above
 */
 
-async function showApp() {
+async function showApp(offlineMode) {
   if (window._stopLoginSprite) window._stopLoginSprite();
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('work-app').style.display = 'block';
-  showSyncStatus('Syncing...');
-  try { await loadFromSupabase(); } catch(e) { console.warn('Supabase load failed, using local data:', e); }
-  hideSyncStatus();
+  if (!offlineMode) {
+    showSyncStatus('Syncing...');
+    try { await loadFromSupabase(); } catch(e) { console.warn('Supabase load failed, using local data:', e); }
+    hideSyncStatus();
+  }
   init();
 
   // Get current user email
-  const { data: { session } } = await sb.auth.getSession();
+  let session = null;
+  try { const { data } = await sb.auth.getSession(); session = data?.session; } catch(e) {};
   const userEmail = session?.user?.email?.toLowerCase() || '';
   window._currentUserEmail = userEmail;
 
