@@ -2699,13 +2699,14 @@ async function initAuth() {
     }
   }
 
-  // Check existing session
+  // Check existing session — 4s timeout so a hung Supabase doesn't block the app
   let session = null;
   try {
-    const { data } = await sb.auth.getSession();
+    const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000));
+    const { data } = await Promise.race([sb.auth.getSession(), timeout]);
     session = data?.session || null;
   } catch(e) {
-    console.warn('Supabase getSession failed:', e);
+    console.warn('Supabase getSession failed or timed out:', e);
   }
   if (session) {
     const userEmail = session.user.email?.toLowerCase();
