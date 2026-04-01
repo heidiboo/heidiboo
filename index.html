@@ -2293,18 +2293,32 @@ const SUPA_MAP = {
   pomoDate:        { table:'settings', id:'pomoDate' },
 };
 
-async function syncToSupabase(key, val) {
+// Throttle: queue writes and flush at most once every 30s to stay within free tier disk IO
+const _supaQueue = {};
+let _supaFlushTimer = null;
+function syncToSupabase(key, val) {
   const m = SUPA_MAP[key];
   if (!m) return;
-  const { error } = await sb.from(m.table).upsert(
-    m.table === 'tasks'    ? { id: m.id, date: key, data: val } :
-    m.table === 'docs'     ? { id: m.id, data: val } :
-    m.table === 'projects' ? { id: m.id, data: val } :
-    m.table === 'schedule' ? { week_key: m.id, data: val } :
-                             { key: m.id, value: val },
-    { onConflict: m.table === 'schedule' ? 'week_key' : m.table === 'settings' ? 'key' : 'id' }
-  );
-  if (error) console.warn('Supabase sync error:', key, error.message);
+  _supaQueue[key] = val; // overwrite with latest value
+  if (_supaFlushTimer) return;
+  _supaFlushTimer = setTimeout(async () => {
+    _supaFlushTimer = null;
+    const entries = Object.entries(_supaQueue);
+    for (const k in _supaQueue) delete _supaQueue[k];
+    for (const [k, v] of entries) {
+      const mp = SUPA_MAP[k]; if (!mp) continue;
+      try {
+        await sb.from(mp.table).upsert(
+          mp.table === 'tasks'    ? { id: mp.id, date: k, data: v } :
+          mp.table === 'docs'     ? { id: mp.id, data: v } :
+          mp.table === 'projects' ? { id: mp.id, data: v } :
+          mp.table === 'schedule' ? { week_key: mp.id, data: v } :
+                                    { key: mp.id, value: v },
+          { onConflict: mp.table === 'schedule' ? 'week_key' : mp.table === 'settings' ? 'key' : 'id' }
+        );
+      } catch(e) { console.warn('Supabase sync error:', k, e.message); }
+    }
+  }, 30000); // flush every 30 seconds max
 }
 
 async function loadFromSupabase() {
