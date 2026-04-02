@@ -9684,9 +9684,16 @@ function doingMyFinances() {
   const sections = getFinanceLinks();
   const banks = sections.find(s => s.id === 'banks');
   if (!banks || !banks.links.length) { alert('No bank links saved yet.'); return; }
-  // Stagger opens 150ms apart — browsers block simultaneous window.open() calls
-  banks.links.forEach((lk, i) => {
-    setTimeout(() => { window.open(lk.url, '_blank'); }, i * 150);
+  // Synchronous anchor clicks stay within the trusted user-gesture context
+  // so the browser popup blocker allows all tabs to open
+  banks.links.forEach(lk => {
+    const a = document.createElement('a');
+    a.href = lk.url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   });
 }
 
