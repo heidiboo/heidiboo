@@ -1439,6 +1439,81 @@
     .schedule-wrap { padding: 16px 16px 32px; }
     .sched-day-body { grid-template-columns: 1fr; }
   }
+
+  /* ── Finances Tab ──────────────────────────────────────── */
+  #tab-finances { padding: 0; }
+  .fin-wrap { max-width: 760px; margin: 0 auto; padding: 32px 32px 64px; }
+  .fin-doing-btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 11px 22px; background: var(--ink); color: #F9F7F3;
+    border: none; border-radius: var(--radius); font-family: var(--sans);
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    transition: opacity 0.15s; margin-bottom: 36px;
+  }
+  .fin-doing-btn:hover { opacity: 0.8; }
+  .fin-section { margin-bottom: 32px; }
+  .fin-section-header {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 12px;
+  }
+  .fin-section-title {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.09em;
+    text-transform: uppercase; font-family: var(--mono); color: var(--ink2);
+    cursor: pointer;
+  }
+  .fin-section-title:hover { color: var(--ink); }
+  .fin-section-del {
+    background: none; border: none; color: var(--ink3); cursor: pointer;
+    font-size: 14px; padding: 0 2px; line-height: 1;
+    opacity: 0; transition: opacity 0.15s;
+  }
+  .fin-section-header:hover .fin-section-del { opacity: 1; }
+  .fin-links { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .fin-link-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 12px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; font-size: 13px; color: var(--ink);
+    text-decoration: none; cursor: pointer; transition: border-color 0.15s;
+    font-family: var(--sans);
+  }
+  .fin-link-chip:hover { border-color: var(--ink2); }
+  .fin-link-del {
+    background: none; border: none; color: var(--ink3); cursor: pointer;
+    font-size: 12px; padding: 0; line-height: 1; margin-left: 2px;
+    opacity: 0; transition: opacity 0.15s;
+  }
+  .fin-link-chip:hover .fin-link-del { opacity: 1; }
+  .fin-add-link-btn {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 7px 12px; background: transparent; border: 1px dashed var(--border);
+    border-radius: 8px; font-size: 12px; color: var(--ink2); cursor: pointer;
+    font-family: var(--sans); transition: border-color 0.15s, color 0.15s;
+  }
+  .fin-add-link-btn:hover { border-color: var(--ink2); color: var(--ink); }
+  .fin-add-section-btn {
+    background: none; border: none; color: var(--ink2); cursor: pointer;
+    font-size: 12px; font-family: var(--sans); padding: 6px 0; display: flex;
+    align-items: center; gap: 4px; transition: color 0.15s;
+  }
+  .fin-add-section-btn:hover { color: var(--ink); }
+  /* Finance link modal */
+  #fin-link-modal {
+    position: fixed; inset: 0; z-index: 9000; background: rgba(0,0,0,0.25);
+    display: none; align-items: center; justify-content: center;
+    backdrop-filter: blur(3px);
+  }
+  .fin-link-modal-box {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); box-shadow: 0 8px 32px rgba(0,0,0,0.16);
+    padding: 20px; width: 300px;
+  }
+  /* Finance section rename */
+  .fin-section-title-input {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.09em;
+    text-transform: uppercase; font-family: var(--mono); color: var(--ink);
+    background: var(--bg); border: 1px solid var(--ink); border-radius: 4px;
+    padding: 2px 6px; outline: none; width: 120px;
+  }
 </style>
 
 </head>
@@ -1597,6 +1672,7 @@
         <button class="nav-btn" onclick="showTab('projects',this)" ondblclick="closeProject()">Projects</button>
         <button class="nav-btn" onclick="showTab('docs',this)">Docs</button>
         <button class="nav-btn" onclick="showTab('schedule',this)">Schedule</button>
+        <button class="nav-btn" onclick="showTab('finances',this)">Finances</button>
         <button class="nav-btn" id="fullscreen-btn" onclick="toggleFullscreen()" title="Toggle fullscreen" style="margin-left:auto;font-size:13px">⛶</button>
       </nav>
     </div>
@@ -1899,7 +1975,39 @@
       </div>
     </div>
 
+    <!-- FINANCES TAB -->
+    <div class="tab" id="tab-finances">
+      <div class="fin-wrap">
+        <button class="fin-doing-btn" onclick="doingMyFinances()">💰 Doing my finances</button>
+        <div id="fin-sections"></div>
+        <button class="fin-add-section-btn" onclick="addFinanceSection()">+ Add section</button>
+      </div>
+    </div>
+
   </main>
+
+  <!-- Finance link modal -->
+  <div id="fin-link-modal" onclick="if(event.target===this)closeFinLinkModal()">
+    <div class="fin-link-modal-box">
+      <div style="font-size:13px;font-weight:600;margin-bottom:14px" id="fin-link-modal-title">Add link</div>
+      <div style="margin-bottom:10px">
+        <div style="font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink2);margin-bottom:4px;font-family:var(--mono)">Label</div>
+        <input id="fin-link-label-input" type="text" placeholder="e.g. Chase, Sallie Mae…"
+          style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:var(--sans);background:var(--bg);color:var(--ink);outline:none;box-sizing:border-box"
+          onkeydown="if(event.key==='Enter')document.getElementById('fin-link-url-input').focus()">
+      </div>
+      <div style="margin-bottom:16px">
+        <div style="font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink2);margin-bottom:4px;font-family:var(--mono)">URL</div>
+        <input id="fin-link-url-input" type="url" placeholder="https://"
+          style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:var(--sans);background:var(--bg);color:var(--ink);outline:none;box-sizing:border-box"
+          onkeydown="if(event.key==='Enter')saveFinLinkModal();if(event.key==='Escape')closeFinLinkModal()">
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px">
+        <button onclick="closeFinLinkModal()" style="padding:6px 14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:transparent;cursor:pointer;font-size:12px;color:var(--ink2);font-family:var(--sans)">Cancel</button>
+        <button onclick="saveFinLinkModal()" style="padding:6px 14px;border:none;border-radius:var(--radius-sm);background:var(--ink);color:#F9F7F3;cursor:pointer;font-size:12px;font-family:var(--sans);font-weight:500">Save</button>
+      </div>
+    </div>
+  </div>
 </div><!-- /work-app -->
 
 <!-- GLOBAL SEARCH OVERLAY -->
@@ -2291,6 +2399,7 @@ const SUPA_MAP = {
   skills:          { table:'settings', id:'skills' },
   pomoSessions:    { table:'settings', id:'pomoSessions' },
   pomoDate:        { table:'settings', id:'pomoDate' },
+  financeLinks:    { table:'settings', id:'financeLinks' },
 };
 
 // Throttle: queue writes and flush at most once every 30s to stay within free tier disk IO
@@ -6367,6 +6476,21 @@ function addImgCaption(imgId) {
   r.selectNodeContents(caption);
   const sel = window.getSelection();
   sel.removeAllRanges(); sel.addRange(r);
+  saveImgContext(imgId);
+}
+
+function saveImgContext(imgId) {
+  const wrap = document.getElementById(imgId);
+  if (!wrap) return;
+  // Check if inside an action log entry
+  const logEntry = wrap.closest('[data-log-id]');
+  if (logEntry) {
+    const pi = parseInt(logEntry.dataset.pi);
+    const logId = logEntry.dataset.logId;
+    const contentEl = logEntry.querySelector('.log-entry-content');
+    if (contentEl) editActionLog(pi, logId, contentEl.innerHTML);
+    return;
+  }
   autoSaveDoc();
 }
 
@@ -6378,7 +6502,7 @@ function setImgAlign(imgId, align) {
   if (align==='left')   { wrap.style.marginRight='auto'; wrap.style.marginLeft='0'; wrap.style.width='60%'; }
   if (align==='center') { wrap.style.margin='12px auto'; wrap.style.width='100%'; }
   if (align==='right')  { wrap.style.marginLeft='auto'; wrap.style.marginRight='0'; wrap.style.width='60%'; }
-  autoSaveDoc();
+  saveImgContext(imgId);
 }
 
 function startImgResize(e, id) {
@@ -6397,7 +6521,7 @@ function startImgResize(e, id) {
   function onUp() {
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
-    autoSaveDoc();
+    saveImgContext(id);
   }
   document.addEventListener('mousemove', onMove);
   document.addEventListener('mouseup', onUp);
@@ -6635,13 +6759,14 @@ function renderProjectDetail() {
       </div>
       <div id="action-log-list" style="display:flex;flex-wrap:wrap;gap:0">
         ${((p.actionLog||[]).slice().reverse()).map(entry => `
-          <div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);width:100%" data-log-id="${entry.id}">
+          <div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);width:100%" data-log-id="${entry.id}" data-pi="${i}">
             <div style="flex-shrink:0;width:5px;height:5px;border-radius:50%;background:var(--ink3);margin-top:6px"></div>
             <div style="flex:1;min-width:0">
-              <div contenteditable="true" style="font-size:12px;color:var(--ink);line-height:1.5;white-space:pre-wrap;outline:none;cursor:text"
-                onblur="editActionLog(${i},'${entry.id}',this.textContent.trim())"
-                onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();this.blur();}"
-              >${escHtml(entry.text)}</div>
+              <div class="log-entry-content" contenteditable="true" style="font-size:12px;color:var(--ink);line-height:1.5;outline:none;cursor:text"
+                onblur="editActionLog(${i},'${entry.id}',this.innerHTML)"
+                onkeydown="logEntryKeydown(event,${i},'${entry.id}')"
+                onpaste="logEntryPaste(event,${i},'${entry.id}')"
+              >${entry.text}</div>
               <div style="font-size:10px;color:var(--ink3);margin-top:2px;font-family:var(--mono)">${entry.ts}</div>
             </div>
             <button onclick="deleteActionLog(${i},'${entry.id}')" style="background:none;border:none;cursor:pointer;color:var(--ink3);font-size:13px;opacity:0;padding:2px 4px;align-self:flex-start;line-height:1;flex-shrink:0" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0'" title="Delete">×</button>
@@ -7183,13 +7308,55 @@ function addActionLog(pi) {
   renderProjectDetail(); // re-renders with input hidden
 }
 
-function editActionLog(pi, logId, newText) {
+function editActionLog(pi, logId, newHTML) {
   const p = projects[pi]; if (!p || !p.actionLog) return;
-  if (!newText) { deleteActionLog(pi, logId); return; }
+  // Check if empty (no text and no images)
+  const tmp = document.createElement('div'); tmp.innerHTML = newHTML;
+  const isEmpty = !tmp.textContent.trim() && !tmp.querySelector('img');
+  if (isEmpty) { deleteActionLog(pi, logId); return; }
   const entry = p.actionLog.find(e => e.id === logId);
-  if (entry && newText !== entry.text) {
-    entry.text = newText;
-    save('projects', projects);
+  if (entry && newHTML !== entry.text) { entry.text = newHTML; save('projects', projects); }
+}
+
+function logEntryKeydown(e, pi, logId) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.currentTarget.blur(); return; }
+  // Delete selected image with Backspace/Delete
+  if (e.key === 'Backspace' || e.key === 'Delete') {
+    const sel = window.getSelection();
+    if (sel.rangeCount) {
+      const node = sel.getRangeAt(0).startContainer;
+      const wrap = node.nodeType === 1 ? node.closest?.('.doc-img-wrap') : node.parentElement?.closest('.doc-img-wrap');
+      if (wrap) { e.preventDefault(); wrap.remove(); editActionLog(pi, logId, e.currentTarget.innerHTML); }
+    }
+  }
+}
+
+function logEntryPaste(e, pi, logId) {
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  const contentEl = e.currentTarget; // capture before async
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      e.preventDefault();
+      const reader = new FileReader();
+      reader.onload = ev => {
+        const wrap = buildImgWrap(ev.target.result);
+        const sel = window.getSelection();
+        if (sel.rangeCount) {
+          const range = sel.getRangeAt(0);
+          range.deleteContents();
+          range.insertNode(wrap);
+          const br = document.createElement('br');
+          wrap.insertAdjacentElement('afterend', br);
+          const nr = document.createRange();
+          nr.setStartAfter(br); nr.collapse(true);
+          sel.removeAllRanges(); sel.addRange(nr);
+        }
+        editActionLog(pi, logId, contentEl.innerHTML);
+      };
+      reader.readAsDataURL(item.getAsFile());
+      return;
+    }
   }
 }
 
@@ -9446,6 +9613,159 @@ function init() {
   initMode();
   initFlowCanvas('flow-canvas', 8, true);
   pomoRender();
+  renderFinances();
+}
+
+// ── Finances ─────────────────────────────────────────────────────────────────
+
+const FIN_DEFAULTS = [
+  { id: 'banks', name: 'Banks', links: [
+    { id: 'sofi',        label: 'SoFi',        url: 'https://www.sofi.com' },
+    { id: 'amex',        label: 'Amex',        url: 'https://www.americanexpress.com' },
+    { id: 'chase',       label: 'Chase',       url: 'https://www.chase.com' },
+    { id: 'bilt',        label: 'Bilt',        url: 'https://www.biltrewards.com' },
+    { id: 'wealthfront', label: 'Wealthfront', url: 'https://www.wealthfront.com' },
+    { id: 'fidelity',    label: 'Fidelity',    url: 'https://www.fidelity.com' },
+  ]},
+  { id: 'student-loans',  name: 'Student Loans',  links: [] },
+  { id: 'car',            name: 'Car',             links: [] },
+  { id: 'pet-insurance',  name: 'Pet Insurance',   links: [] },
+  { id: 'subscriptions',  name: 'Subscriptions',   links: [] },
+];
+
+function getFinanceLinks() {
+  const raw = load('financeLinks', null);
+  if (raw && Array.isArray(raw)) return raw;
+  return JSON.parse(JSON.stringify(FIN_DEFAULTS));
+}
+
+function saveFinanceLinks(sections) {
+  save('financeLinks', sections);
+  syncToSupabase('financeLinks', sections);
+}
+
+function renderFinances() {
+  const wrap = document.getElementById('fin-sections');
+  if (!wrap) return;
+  const sections = getFinanceLinks();
+  wrap.innerHTML = sections.map(sec => `
+    <div class="fin-section" id="fin-sec-${sec.id}">
+      <div class="fin-section-header">
+        <span class="fin-section-title" ondblclick="renameFinanceSection('${sec.id}')" title="Double-click to rename">${escHtml(sec.name)}</span>
+        <button class="fin-section-del" onclick="deleteFinanceSection('${sec.id}')" title="Delete section">×</button>
+      </div>
+      <div class="fin-links">
+        ${sec.links.map(lk => `
+          <a href="${escHtml(lk.url)}" target="_blank" rel="noopener" class="fin-link-chip" onclick="event.stopPropagation()">
+            ${escHtml(lk.label)}
+            <button class="fin-link-del" onclick="event.preventDefault();event.stopPropagation();deleteFinanceLink('${sec.id}','${lk.id}')" title="Remove">×</button>
+          </a>
+        `).join('')}
+        <button class="fin-add-link-btn" onclick="openFinLinkModal('${sec.id}')">+ Add</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function doingMyFinances() {
+  const sections = getFinanceLinks();
+  const banks = sections.find(s => s.id === 'banks');
+  if (!banks || !banks.links.length) { alert('No bank links saved yet.'); return; }
+  banks.links.forEach(lk => window.open(lk.url, '_blank'));
+}
+
+// ── Finance link modal ────────────────────────────────────────────────────────
+let _finModalSectionId = null;
+let _finModalLinkId = null;
+
+function openFinLinkModal(sectionId, linkId) {
+  _finModalSectionId = sectionId;
+  _finModalLinkId = linkId || null;
+  const sections = getFinanceLinks();
+  const sec = sections.find(s => s.id === sectionId);
+  const existing = linkId ? sec?.links.find(l => l.id === linkId) : null;
+  document.getElementById('fin-link-modal-title').textContent = existing ? 'Edit link' : 'Add link';
+  document.getElementById('fin-link-label-input').value = existing ? existing.label : '';
+  document.getElementById('fin-link-url-input').value = existing ? existing.url : '';
+  document.getElementById('fin-link-modal').style.display = 'flex';
+  setTimeout(() => document.getElementById('fin-link-label-input').focus(), 50);
+}
+
+function closeFinLinkModal() {
+  document.getElementById('fin-link-modal').style.display = 'none';
+  _finModalSectionId = null;
+  _finModalLinkId = null;
+}
+
+function saveFinLinkModal() {
+  const label = document.getElementById('fin-link-label-input').value.trim();
+  let url = document.getElementById('fin-link-url-input').value.trim();
+  if (!label || !url) return;
+  if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+  const sections = getFinanceLinks();
+  const sec = sections.find(s => s.id === _finModalSectionId);
+  if (!sec) return;
+  if (_finModalLinkId) {
+    const lk = sec.links.find(l => l.id === _finModalLinkId);
+    if (lk) { lk.label = label; lk.url = url; }
+  } else {
+    sec.links.push({ id: Date.now().toString(36), label, url });
+  }
+  saveFinanceLinks(sections);
+  closeFinLinkModal();
+  renderFinances();
+}
+
+function deleteFinanceLink(sectionId, linkId) {
+  const sections = getFinanceLinks();
+  const sec = sections.find(s => s.id === sectionId);
+  if (!sec) return;
+  sec.links = sec.links.filter(l => l.id !== linkId);
+  saveFinanceLinks(sections);
+  renderFinances();
+}
+
+function addFinanceSection() {
+  const name = prompt('Section name:');
+  if (!name || !name.trim()) return;
+  const sections = getFinanceLinks();
+  sections.push({ id: Date.now().toString(36), name: name.trim(), links: [] });
+  saveFinanceLinks(sections);
+  renderFinances();
+}
+
+function deleteFinanceSection(sectionId) {
+  const sections = getFinanceLinks();
+  const sec = sections.find(s => s.id === sectionId);
+  if (!sec) return;
+  if (!confirm(`Delete "${sec.name}" and all its links?`)) return;
+  saveFinanceLinks(sections.filter(s => s.id !== sectionId));
+  renderFinances();
+}
+
+function renameFinanceSection(sectionId) {
+  const secEl = document.querySelector(`#fin-sec-${sectionId} .fin-section-title`);
+  if (!secEl) return;
+  const sections = getFinanceLinks();
+  const sec = sections.find(s => s.id === sectionId);
+  if (!sec) return;
+  const input = document.createElement('input');
+  input.className = 'fin-section-title-input';
+  input.value = sec.name;
+  secEl.replaceWith(input);
+  input.focus();
+  input.select();
+  const commit = () => {
+    const newName = input.value.trim() || sec.name;
+    sec.name = newName;
+    saveFinanceLinks(sections);
+    renderFinances();
+  };
+  input.onblur = commit;
+  input.onkeydown = e => {
+    if (e.key === 'Enter') { input.blur(); }
+    if (e.key === 'Escape') { renderFinances(); }
+  };
 }
 </script>
 
