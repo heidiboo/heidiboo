@@ -1470,11 +1470,15 @@
   .fin-section-header:hover .fin-section-del { opacity: 1; }
   .fin-links { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .fin-link-chip {
-    display: inline-flex; align-items: center; gap: 6px;
+    display: inline-flex; align-items: center; gap: 8px;
     padding: 7px 12px; background: var(--surface); border: 1px solid var(--border);
     border-radius: 8px; font-size: 13px; color: var(--ink);
     text-decoration: none; cursor: pointer; transition: border-color 0.15s;
     font-family: var(--sans);
+  }
+  .fin-link-favicon {
+    width: 16px; height: 16px; border-radius: 3px; object-fit: contain;
+    flex-shrink: 0; display: block;
   }
   .fin-link-chip:hover { border-color: var(--ink2); }
   .fin-link-del {
@@ -9644,6 +9648,13 @@ function saveFinanceLinks(sections) {
   syncToSupabase('financeLinks', sections);
 }
 
+function finFavicon(url) {
+  try {
+    const domain = new URL(url).hostname;
+    return `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
+  } catch { return ''; }
+}
+
 function renderFinances() {
   const wrap = document.getElementById('fin-sections');
   if (!wrap) return;
@@ -9655,12 +9666,14 @@ function renderFinances() {
         <button class="fin-section-del" onclick="deleteFinanceSection('${sec.id}')" title="Delete section">×</button>
       </div>
       <div class="fin-links">
-        ${sec.links.map(lk => `
-          <a href="${escHtml(lk.url)}" target="_blank" rel="noopener" class="fin-link-chip" onclick="event.stopPropagation()">
-            ${escHtml(lk.label)}
+        ${sec.links.map(lk => {
+          const favicon = finFavicon(lk.url);
+          const imgTag = favicon ? `<img class="fin-link-favicon" src="${escHtml(favicon)}" alt="" onerror="this.style.display='none'">` : '';
+          return `<a href="${escHtml(lk.url)}" target="_blank" rel="noopener" class="fin-link-chip" onclick="event.stopPropagation()">
+            ${imgTag}${escHtml(lk.label)}
             <button class="fin-link-del" onclick="event.preventDefault();event.stopPropagation();deleteFinanceLink('${sec.id}','${lk.id}')" title="Remove">×</button>
-          </a>
-        `).join('')}
+          </a>`;
+        }).join('')}
         <button class="fin-add-link-btn" onclick="openFinLinkModal('${sec.id}')">+ Add</button>
       </div>
     </div>
@@ -9671,7 +9684,10 @@ function doingMyFinances() {
   const sections = getFinanceLinks();
   const banks = sections.find(s => s.id === 'banks');
   if (!banks || !banks.links.length) { alert('No bank links saved yet.'); return; }
-  banks.links.forEach(lk => window.open(lk.url, '_blank'));
+  // Stagger opens 150ms apart — browsers block simultaneous window.open() calls
+  banks.links.forEach((lk, i) => {
+    setTimeout(() => { window.open(lk.url, '_blank'); }, i * 150);
+  });
 }
 
 // ── Finance link modal ────────────────────────────────────────────────────────
