@@ -9046,14 +9046,20 @@ function renderSchedule() {
               <div class="sched-blocks sched-timeline">${blocksHtml}</div>
               <div class="sched-add-row">
                 <div class="sched-time-pick">
-                  <input class="sched-add-hour" id="sadd-hour-${day}" type="text" inputmode="numeric" maxlength="2" placeholder="7" oninput="schedHourInput(event,'${day}','sadd-min-${day}')" onkeydown="schedHourKey(event)">
+                  <input class="sched-add-hour" id="sadd-hour-${day}" type="text" inputmode="numeric" maxlength="2" placeholder="7"
+                    oninput="schedHourInput(event,'sadd-min-${day}')">
                   <span class="sched-time-sep">:</span>
-                  <input class="sched-add-min" id="sadd-min-${day}" type="text" inputmode="numeric" maxlength="2" placeholder="00" onkeydown="schedMinKey(event,'sadd-hour-${day}')">
+                  <input class="sched-add-min" id="sadd-min-${day}" type="text" inputmode="numeric" maxlength="2" placeholder="00"
+                    oninput="schedMinInput(event)"
+                    onkeydown="schedMinKey(event,'sadd-hour-${day}')">
                   <button class="sched-ampm-btn" id="sadd-ampm-${day}" onclick="toggleAmPm('${day}')">AM</button>
                   <span class="sched-time-arrow">→</span>
-                  <input class="sched-add-hour" id="sadd-ehour-${day}" type="text" inputmode="numeric" maxlength="2" placeholder="—" oninput="schedHourInput(event,'${day}','sadd-emin-${day}')" onkeydown="schedHourKey(event)">
+                  <input class="sched-add-hour" id="sadd-ehour-${day}" type="text" inputmode="numeric" maxlength="2" placeholder="—"
+                    oninput="schedHourInput(event,'sadd-emin-${day}')">
                   <span class="sched-time-sep">:</span>
-                  <input class="sched-add-min" id="sadd-emin-${day}" type="text" inputmode="numeric" maxlength="2" placeholder="00" onkeydown="schedMinKey(event,'sadd-ehour-${day}')">
+                  <input class="sched-add-min" id="sadd-emin-${day}" type="text" inputmode="numeric" maxlength="2" placeholder="00"
+                    oninput="schedMinInput(event)"
+                    onkeydown="schedMinKey(event,'sadd-ehour-${day}')">
                   <button class="sched-ampm-btn" id="sadd-eampm-${day}" onclick="toggleEndAmPm('${day}')">AM</button>
                 </div>
                 <input class="sched-add-label" id="sadd-label-${day}" placeholder="Add block..."
@@ -9186,26 +9192,21 @@ function renderFocusSchedule() {
 
 function saveBlockEdit(day,idx,field,val){ scheduleData[day].blocks[idx][field]=val; saveSchedule(); saveCurrentWeek(); }
 function deleteBlock(day,idx){ pushScheduleUndo(day); scheduleData[day].blocks.splice(idx,1); saveSchedule(); saveCurrentWeek(); renderSchedule(); renderFocusSchedule(); renderDailyScheduleView(); }
-// Auto-advance hour → minute when 2 digits entered or value ≥ 3
-function schedHourInput(e, day, minId) {
+// Hour input: strip non-digits, auto-advance to minutes after 2 digits
+function schedHourInput(e, minId) {
   const inp = e.currentTarget;
-  const v = inp.value.replace(/\D/g,'');
-  inp.value = v;
-  // Auto-advance: typed 2 digits, or first digit ≥ 2 (can only be 2-9 for 1-digit hour like 2–9)
-  if (v.length === 2 || (v.length === 1 && parseInt(v) >= 2 && parseInt(v) <= 9)) {
-    // For 2-digit: auto-advance immediately. For single digit ≥2: only advance if it can't be a valid 2-digit start (1x is valid, 2-9 is max)
-    if (v.length === 2 || parseInt(v) > 1) {
-      const minEl = document.getElementById(minId);
-      if (minEl) { minEl.focus(); minEl.select(); }
-    }
+  inp.value = inp.value.replace(/\D/g, '');
+  if (inp.value.length === 2) {
+    const minEl = document.getElementById(minId);
+    if (minEl) { minEl.focus(); minEl.select(); }
   }
 }
-function schedHourKey(e) {
-  if (!/[\d]|Backspace|Tab|ArrowLeft|ArrowRight/.test(e.key)) e.preventDefault();
+// Minute input: strip non-digits; Backspace on empty → back to hour
+function schedMinInput(e, hourId) {
+  const inp = e.currentTarget;
+  inp.value = inp.value.replace(/\D/g, '');
 }
 function schedMinKey(e, hourId) {
-  if (!/[\d]|Backspace|Tab|ArrowLeft|ArrowRight/.test(e.key)) e.preventDefault();
-  // Backspace on empty min → back to hour
   if (e.key === 'Backspace' && e.currentTarget.value === '') {
     const hourEl = document.getElementById(hourId);
     if (hourEl) { hourEl.focus(); hourEl.select(); }
