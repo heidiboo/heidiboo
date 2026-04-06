@@ -9047,20 +9047,26 @@ function renderSchedule() {
               <div class="sched-add-row">
                 <div class="sched-time-pick">
                   <input class="sched-add-hour" id="sadd-hour-${day}" type="text" inputmode="numeric" maxlength="2" placeholder="7"
-                    oninput="schedHourInput(event,'sadd-min-${day}')">
+                    oninput="schedHourInput(event,'sadd-min-${day}')"
+                    onkeydown="schedHourKey(event,'sadd-min-${day}')">
                   <span class="sched-time-sep">:</span>
                   <input class="sched-add-min" id="sadd-min-${day}" type="text" inputmode="numeric" maxlength="2" placeholder="00"
                     oninput="schedMinInput(event)"
-                    onkeydown="schedMinKey(event,'sadd-hour-${day}')">
-                  <button class="sched-ampm-btn" id="sadd-ampm-${day}" onclick="toggleAmPm('${day}')">AM</button>
+                    onkeydown="schedMinKey(event,'sadd-hour-${day}','sadd-ampm-${day}',null)">
+                  <button class="sched-ampm-btn" id="sadd-ampm-${day}" tabindex="0"
+                    onclick="toggleAmPm('${day}')"
+                    onkeydown="schedAmpmKey(event,'${day}',false)">AM</button>
                   <span class="sched-time-arrow">→</span>
                   <input class="sched-add-hour" id="sadd-ehour-${day}" type="text" inputmode="numeric" maxlength="2" placeholder="—"
-                    oninput="schedHourInput(event,'sadd-emin-${day}')">
+                    oninput="schedHourInput(event,'sadd-emin-${day}')"
+                    onkeydown="schedEndHourKey(event,'${day}')">
                   <span class="sched-time-sep">:</span>
                   <input class="sched-add-min" id="sadd-emin-${day}" type="text" inputmode="numeric" maxlength="2" placeholder="00"
                     oninput="schedMinInput(event)"
-                    onkeydown="schedMinKey(event,'sadd-ehour-${day}')">
-                  <button class="sched-ampm-btn" id="sadd-eampm-${day}" onclick="toggleEndAmPm('${day}')">AM</button>
+                    onkeydown="schedMinKey(event,'sadd-ehour-${day}','sadd-eampm-${day}','sadd-label-${day}')">
+                  <button class="sched-ampm-btn" id="sadd-eampm-${day}" tabindex="0"
+                    onclick="toggleEndAmPm('${day}')"
+                    onkeydown="schedAmpmKey(event,'${day}',true)">AM</button>
                 </div>
                 <input class="sched-add-label" id="sadd-label-${day}" placeholder="Add block..."
                   onkeydown="if(event.key==='Enter'){event.preventDefault();addBlock('${day}')}">
@@ -9192,24 +9198,58 @@ function renderFocusSchedule() {
 
 function saveBlockEdit(day,idx,field,val){ scheduleData[day].blocks[idx][field]=val; saveSchedule(); saveCurrentWeek(); }
 function deleteBlock(day,idx){ pushScheduleUndo(day); scheduleData[day].blocks.splice(idx,1); saveSchedule(); saveCurrentWeek(); renderSchedule(); renderFocusSchedule(); renderDailyScheduleView(); }
-// Hour input: strip non-digits, auto-advance to minutes after 2 digits
+function _schedFocus(id) { const el = document.getElementById(id); if (el) { el.focus(); if (el.select) el.select(); } }
+
+// Hour: strip non-digits; 2 digits auto-advances; Enter advances
 function schedHourInput(e, minId) {
   const inp = e.currentTarget;
   inp.value = inp.value.replace(/\D/g, '');
-  if (inp.value.length === 2) {
-    const minEl = document.getElementById(minId);
-    if (minEl) { minEl.focus(); minEl.select(); }
+  if (inp.value.length === 2) _schedFocus(minId);
+}
+function schedHourKey(e, minId) {
+  if (e.key === 'Enter') { e.preventDefault(); _schedFocus(minId); }
+}
+
+// Minute: strip non-digits; Enter → AM/PM (or skip-to if empty); Backspace empty → hour
+function schedMinInput(e) { e.currentTarget.value = e.currentTarget.value.replace(/\D/g, ''); }
+function schedMinKey(e, hourId, ampmId, skipToId) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    (!e.currentTarget.value && skipToId) ? _schedFocus(skipToId) : _schedFocus(ampmId);
+  }
+  if ((e.key === 'Backspace' || e.key === 'Delete') && e.currentTarget.value === '') {
+    e.preventDefault(); _schedFocus(hourId);
   }
 }
-// Minute input: strip non-digits; Backspace on empty → back to hour
-function schedMinInput(e, hourId) {
-  const inp = e.currentTarget;
-  inp.value = inp.value.replace(/\D/g, '');
+
+// AM/PM button: Enter = toggle; Shift+Enter = advance; a/p = set directly; Backspace = back to minute
+function schedAmpmKey(e, day, isEnd) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault(); isEnd ? toggleEndAmPm(day) : toggleAmPm(day);
+  }
+  if (e.key === 'Enter' && e.shiftKey) {
+    e.preventDefault();
+    isEnd ? _schedFocus('sadd-label-'+day) : _schedFocus('sadd-ehour-'+day);
+  }
+  if (e.key.toLowerCase() === 'a' || e.key.toLowerCase() === 'p') {
+    e.preventDefault();
+    const id = isEnd ? 'sadd-eampm-'+day : 'sadd-ampm-'+day;
+    const btn = document.getElementById(id);
+    if (btn && btn.textContent.trim() !== e.key.toUpperCase()+'M') isEnd ? toggleEndAmPm(day) : toggleAmPm(day);
+  }
+  if ((e.key === 'Backspace' || e.key === 'Delete')) {
+    e.preventDefault(); _schedFocus(isEnd ? 'sadd-emin-'+day : 'sadd-min-'+day);
+  }
 }
-function schedMinKey(e, hourId) {
-  if (e.key === 'Backspace' && e.currentTarget.value === '') {
-    const hourEl = document.getElementById(hourId);
-    if (hourEl) { hourEl.focus(); hourEl.select(); }
+
+// End hour: Enter empty → skip to label; Enter filled → end minute; Backspace empty → start AM/PM
+function schedEndHourKey(e, day) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    !e.currentTarget.value ? _schedFocus('sadd-label-'+day) : _schedFocus('sadd-emin-'+day);
+  }
+  if ((e.key === 'Backspace' || e.key === 'Delete') && e.currentTarget.value === '') {
+    e.preventDefault(); _schedFocus('sadd-ampm-'+day);
   }
 }
 
