@@ -1072,23 +1072,31 @@
   .sblock.drag-over { background: rgba(0,0,0,0.05) !important; border-left-color: var(--ink) !important; }
   /* AM/PM picker */
   .sched-time-pick { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
-  .sched-add-hour {
+  /* Single free-text time input (replaces hour + minute dropdown) */
+  .sched-add-time-input {
     font-family: var(--mono); font-size: 10px;
     border: none; border-bottom: 1px solid var(--border);
     background: transparent; color: var(--ink); outline: none;
-    width: 22px; padding: 3px 0; text-align: center;
-    -moz-appearance: textfield;
+    width: 38px; padding: 3px 2px; text-align: center;
   }
-  .sched-add-hour::-webkit-inner-spin-button,
-  .sched-add-hour::-webkit-outer-spin-button { -webkit-appearance: none; }
-  .sched-add-min {
-    font-family: var(--mono); font-size: 10px;
-    border: none; border-bottom: 1px solid var(--border);
-    background: transparent; color: var(--ink2); outline: none;
-    width: 26px; padding: 3px 0; cursor: pointer;
-    appearance: none; -webkit-appearance: none;
+  /* Clickable time label on blocks */
+  button.sblock-time-btn {
+    background: none; border: none; padding: 0; cursor: pointer;
+    font-family: var(--mono); letter-spacing: 0.06em;
+    transition: color 0.12s;
   }
-  .sched-time-sep { font-family: var(--mono); font-size: 10px; color: var(--ink3); }
+  button.sblock-time-btn:hover { color: var(--ink) !important; text-decoration: underline; }
+  /* Inline time editor inside a block */
+  .sblock-time-edit { display: inline-flex; align-items: center; gap: 1px; }
+  .sblock-time-edit-inp {
+    font-family: var(--mono); font-size: 9px; color: var(--ink);
+    border: none; border-bottom: 1px solid var(--ink2);
+    background: transparent; outline: none; width: 32px; text-align: center; padding: 0;
+  }
+  .sblock-time-edit-ap {
+    font-family: var(--mono); font-size: 8px; font-weight: 700;
+    background: none; border: none; cursor: pointer; padding: 0 2px; color: var(--ink2);
+  }
   .sched-ampm-btn {
     font-family: var(--mono); font-size: 8px; font-weight: 700;
     border: 1px solid var(--border); border-radius: 4px;
@@ -4690,7 +4698,9 @@ let autoSaveTimer = null;
 
 function openDoc(id, projectName) {
   currentDocId = id;
-  editorSetup = false;
+  // Note: do NOT reset editorSetup here — the editor element is reused across
+  // docs, so resetting would cause duplicate event listeners (paste fires N times
+  // after opening N docs). setupEditor() is idempotent via its own guard.
   const modal = document.getElementById('doc-modal');
   modal.style.display = 'flex';
   document.body.style.overflow = 'hidden';
@@ -7658,6 +7668,26 @@ function schedToMins(t) {
   return 9999;
 }
 
+function minsToTime(m) {
+  const h24 = Math.floor(m / 60) % 24;
+  const mn = m % 60;
+  const period = h24 < 12 ? 'AM' : 'PM';
+  const h12 = h24 === 0 ? 12 : h24 > 12 ? h24 - 12 : h24;
+  return `${h12}:${String(mn).padStart(2,'0')} ${period}`;
+}
+
+function parseTimeInput(val, ampm) {
+  if (!val || val.trim() === '' || val === '—') return null;
+  const digits = val.replace(/[:\s]/g, '').trim();
+  if (!/^\d+$/.test(digits)) return null;
+  let h, m;
+  if (digits.length <= 2)      { h = parseInt(digits); m = 0; }
+  else if (digits.length === 3) { h = parseInt(digits[0]); m = parseInt(digits.slice(1)); }
+  else                          { h = parseInt(digits.slice(0, -2)); m = parseInt(digits.slice(-2)); }
+  if (isNaN(h) || isNaN(m) || h < 1 || h > 12 || m < 0 || m > 59) return null;
+  return `${h}:${String(m).padStart(2,'0')} ${ampm}`;
+}
+
 // ---- SCHEDULE DATA ----
 const DEFAULT_SCHEDULE = {
   Monday: {
@@ -8895,7 +8925,7 @@ function renderSchedule() {
     // Build display hours: standard grid + any extra hours blocks actually use
     const displayHours = [...new Set([...SCHED_HOURS, ...Object.keys(byHour).map(Number)])].sort((a,b)=>a-b);
     const mkBlock = (b,bi) => {
-      let spanStyle = '', spanClass = '', durLabel = '';
+      let spanStyle = '', spanClass = '';
       if (b.timeEnd) {
         const startM = schedToMins(b.time), endM = schedToMins(b.timeEnd);
         if (endM > startM) {
@@ -8903,15 +8933,19 @@ function renderSchedule() {
           spanStyle = `min-height:${Math.ceil(hrs) * 32}px;`;
         }
         spanClass = ' sblock-span';
-        durLabel = `<span class="sblock-duration">${escHtml(b.time)} – ${escHtml(b.timeEnd)}</span>`;
       }
+      const timeLbl = b.timeEnd
+        ? `${escHtml(b.time)} – ${escHtml(b.timeEnd)}`
+        : escHtml(b.time);
+      const timeCls = b.timeEnd ? 'sblock-duration' : 'sblock-time';
+      const timeEl  = `<button class="${timeCls} sblock-time-btn" onclick="editBlockTime(event,'${day}',${bi})" title="Click to edit time">${timeLbl}</button>`;
       return `
       <div class="sblock ${b.type}${spanClass}" draggable="true" style="${spanStyle}"
         ondragstart="schedDragStart(event,'${day}',${bi})"
         ondragend="document.querySelectorAll('.slot-drag-over').forEach(el=>el.classList.remove('slot-drag-over'))">
         <div class="sblock-resize sblock-resize-top" onmousedown="schedResizeStart(event,'${day}',${bi},'top')"></div>
         <span class="sblock-drag">⠿</span>
-        ${durLabel}
+        ${timeEl}
         <span class="sblock-label" contenteditable="true"
           onblur="saveBlockEdit('${day}',${bi},'label',this.textContent.trim())"
           onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}"
@@ -8995,20 +9029,10 @@ function renderSchedule() {
               <div class="sched-blocks sched-timeline">${blocksHtml}</div>
               <div class="sched-add-row">
                 <div class="sched-time-pick">
-                  <input class="sched-add-hour" id="sadd-hour-${day}" type="number" min="1" max="12" placeholder="7">
-                  <span class="sched-time-sep">:</span>
-                  <select class="sched-add-min" id="sadd-min-${day}">
-                    <option value="00">00</option><option value="15">15</option>
-                    <option value="30">30</option><option value="45">45</option>
-                  </select>
+                  <input class="sched-add-time-input" id="sadd-time-${day}" type="text" placeholder="9:00" maxlength="5">
                   <button class="sched-ampm-btn" id="sadd-ampm-${day}" onclick="toggleAmPm('${day}')">AM</button>
                   <span class="sched-time-arrow">→</span>
-                  <input class="sched-add-hour" id="sadd-ehour-${day}" type="number" min="1" max="12" placeholder="—">
-                  <span class="sched-time-sep">:</span>
-                  <select class="sched-add-min" id="sadd-emin-${day}">
-                    <option value="00">00</option><option value="15">15</option>
-                    <option value="30">30</option><option value="45">45</option>
-                  </select>
+                  <input class="sched-add-time-input" id="sadd-etime-${day}" type="text" placeholder="—" maxlength="5">
                   <button class="sched-ampm-btn" id="sadd-eampm-${day}" onclick="toggleEndAmPm('${day}')">AM</button>
                 </div>
                 <input class="sched-add-label" id="sadd-label-${day}" placeholder="Add block..."
@@ -9140,35 +9164,30 @@ function renderFocusSchedule() {
 }
 
 function saveBlockEdit(day,idx,field,val){ scheduleData[day].blocks[idx][field]=val; saveSchedule(); saveCurrentWeek(); }
-function deleteBlock(day,idx){ scheduleData[day].blocks.splice(idx,1); saveSchedule(); saveCurrentWeek(); renderSchedule(); renderFocusSchedule(); renderDailyScheduleView(); }
+function deleteBlock(day,idx){ pushScheduleUndo(day); scheduleData[day].blocks.splice(idx,1); saveSchedule(); saveCurrentWeek(); renderSchedule(); renderFocusSchedule(); renderDailyScheduleView(); }
 function addBlock(day){
-  const h  = document.getElementById('sadd-hour-'+day);
-  const m  = document.getElementById('sadd-min-'+day);
-  const ap = document.getElementById('sadd-ampm-'+day);
-  const eh = document.getElementById('sadd-ehour-'+day);
-  const em = document.getElementById('sadd-emin-'+day);
-  const eap= document.getElementById('sadd-eampm-'+day);
-  const l  = document.getElementById('sadd-label-'+day);
+  const ti  = document.getElementById('sadd-time-'+day);
+  const eti = document.getElementById('sadd-etime-'+day);
+  const ap  = document.getElementById('sadd-ampm-'+day);
+  const eap = document.getElementById('sadd-eampm-'+day);
+  const l   = document.getElementById('sadd-label-'+day);
   if (!l || !l.value.trim()) return;
-  const hr     = h && h.value ? parseInt(h.value) : 7;
-  const mn     = m ? m.value : '00';
-  const period = ap ? ap.textContent.trim() : 'AM';
-  const timeStr = `${hr}:${mn} ${period}`;
+  const period  = ap ? ap.textContent.trim() : 'AM';
+  const eperiod = eap ? eap.textContent.trim() : 'AM';
+  const timeStr = parseTimeInput(ti?.value, period) || '7:00 AM';
   const newBlock = {type:'routine', time:timeStr, label:l.value.trim()};
-  // End time (optional — creates a spanning block)
-  if (eh && eh.value) {
-    const ehr = parseInt(eh.value);
-    const emn = em ? em.value : '00';
-    const eperiod = eap ? eap.textContent.trim() : 'AM';
-    newBlock.timeEnd = `${ehr}:${emn} ${eperiod}`;
+  if (eti?.value && eti.value !== '—') {
+    const endStr = parseTimeInput(eti.value, eperiod);
+    if (endStr) newBlock.timeEnd = endStr;
   }
+  pushScheduleUndo(day);
   const blocks = scheduleData[day].blocks;
   const newMins = schedToMins(timeStr);
   let insertIdx = blocks.findIndex(b => schedToMins(b.time) > newMins);
   if (insertIdx === -1) insertIdx = blocks.length;
   blocks.splice(insertIdx, 0, newBlock);
-  if (h) h.value = '';
-  if (eh) eh.value = '';
+  if (ti)  ti.value  = '';
+  if (eti) eti.value = '';
   l.value = '';
   saveSchedule(); saveCurrentWeek(); renderSchedule(); renderFocusSchedule(); renderDailyScheduleView();
 }
@@ -9177,17 +9196,40 @@ function toggleAmPm(day){
   if (!btn) return;
   btn.textContent = btn.textContent.trim() === 'AM' ? 'PM' : 'AM';
 }
-// ── BLOCK RESIZE (drag top/bottom edge) ──
+// ── UNDO STACK ──────────────────────────────────────────────────────────────
+const _schedUndoStack = [];
+function pushScheduleUndo(day) {
+  const d = scheduleData[day];
+  if (!d) return;
+  _schedUndoStack.push({ day, blocks: JSON.parse(JSON.stringify(d.blocks)) });
+  if (_schedUndoStack.length > 30) _schedUndoStack.shift();
+}
+document.addEventListener('keydown', e => {
+  if (!(e.metaKey || e.ctrlKey) || e.key !== 'z' || e.shiftKey) return;
+  // Let browser handle undo inside text fields / contenteditable
+  const active = document.activeElement;
+  if (active && (active.isContentEditable || ['INPUT','TEXTAREA','SELECT'].includes(active.tagName))) return;
+  if (!_schedUndoStack.length) return;
+  e.preventDefault();
+  const { day, blocks } = _schedUndoStack.pop();
+  scheduleData[day].blocks = blocks;
+  saveSchedule(); saveCurrentWeek();
+  renderSchedule(); renderFocusSchedule(); renderDailyScheduleView();
+});
+
+// ── BLOCK RESIZE — pixel-delta (works even when spanned rows are hidden) ────
+const PX_PER_HOUR = 32;
 let _resizeState = null, _resizeRafId = null;
 function schedResizeStart(e, day, bi, edge) {
   e.preventDefault(); e.stopPropagation();
   const blockEl = e.currentTarget.closest('.sblock');
-  // Disable native drag on the block so mousemove fires instead of dragover
   if (blockEl) blockEl.draggable = false;
   const block = scheduleData[day]?.blocks[bi];
-  _resizeState = { day, bi, edge, lastHour: -1, blockEl,
-    origStartM: block ? schedToMins(block.time) : 0,
-    origEndM:   block?.timeEnd ? schedToMins(block.timeEnd) : null };
+  if (!block) return;
+  pushScheduleUndo(day);
+  const origStartM = schedToMins(block.time);
+  const origEndM   = block.timeEnd ? schedToMins(block.timeEnd) : origStartM + 60;
+  _resizeState = { day, bi, edge, blockEl, startY: e.clientY, origStartM, origEndM };
   document.body.classList.add('resizing-block');
   document.body.style.cursor = edge === 'top' ? 'n-resize' : 's-resize';
   document.addEventListener('mousemove', schedResizeMove);
@@ -9199,37 +9241,27 @@ function schedResizeMove(e) {
   _resizeRafId = requestAnimationFrame(() => {
     _resizeRafId = null;
     if (!_resizeState) return;
-    const { day, bi, edge, blockEl } = _resizeState;
-    const HOURS = [7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23];
-    for (const h of HOURS) {
-      const row = document.getElementById('shr-'+day+'-'+h);
-      if (!row) continue;
-      const rect = row.getBoundingClientRect();
-      if (e.clientY >= rect.top && e.clientY < rect.bottom) {
-        if (_resizeState.lastHour === h) return;
-        _resizeState.lastHour = h;
-        const block = scheduleData[day].blocks[bi];
-        if (!block) return;
-        const hMins = h * 60;
-        const period = h >= 12 ? 'PM' : 'AM';
-        const dispH = h === 0 ? 12 : h > 12 ? h - 12 : h;
-        const newTime = `${dispH}:00 ${period}`;
-        if (edge === 'bottom') {
-          const startM = schedToMins(block.time);
-          if (hMins > startM) {
-            block.timeEnd = newTime;
-            // Live height update — no full re-render during drag
-            if (blockEl) blockEl.style.minHeight = ((hMins - startM) / 60 * 32) + 'px';
-          }
-        } else {
-          const endMins = block.timeEnd ? schedToMins(block.timeEnd) : (_resizeState.origEndM || 9999);
-          if (hMins < endMins) {
-            block.time = newTime;
-            // Live height update
-            if (blockEl && endMins < 9999) blockEl.style.minHeight = ((endMins - hMins) / 60 * 32) + 'px';
-          }
-        }
-        break;
+    const { day, bi, edge, blockEl, startY, origStartM, origEndM } = _resizeState;
+    const block = scheduleData[day]?.blocks[bi];
+    if (!block) return;
+    // Snap to 15-min increments; PX_PER_HOUR px = 60 min
+    const rawDelta  = (e.clientY - startY) / PX_PER_HOUR * 60;
+    const deltaMins = Math.round(rawDelta / 15) * 15;
+    if (edge === 'bottom') {
+      const newEndM = Math.max(origStartM + 15, Math.min(origEndM + deltaMins, 24 * 60));
+      block.timeEnd = minsToTime(newEndM);
+      if (blockEl) {
+        blockEl.style.height    = ((newEndM - origStartM) / 60 * PX_PER_HOUR) + 'px';
+        blockEl.style.minHeight = 'unset';
+        blockEl.style.overflow  = 'hidden';
+      }
+    } else {
+      const newStartM = Math.max(0, Math.min(origStartM + deltaMins, origEndM - 15));
+      block.time = minsToTime(newStartM);
+      if (blockEl) {
+        blockEl.style.height    = ((origEndM - newStartM) / 60 * PX_PER_HOUR) + 'px';
+        blockEl.style.minHeight = 'unset';
+        blockEl.style.overflow  = 'hidden';
       }
     }
   });
@@ -9241,16 +9273,85 @@ function schedResizeEnd() {
   document.body.classList.remove('resizing-block');
   document.body.style.cursor = '';
   if (_resizeRafId) { cancelAnimationFrame(_resizeRafId); _resizeRafId = null; }
-  // Restore native drag on the block
   if (_resizeState.blockEl) _resizeState.blockEl.draggable = true;
+  _resizeState = null;
   saveSchedule(); saveCurrentWeek();
   renderSchedule(); renderFocusSchedule(); renderDailyScheduleView();
-  _resizeState = null;
 }
 function toggleEndAmPm(day){
   const btn = document.getElementById('sadd-eampm-'+day);
   if (!btn) return;
   btn.textContent = btn.textContent.trim() === 'AM' ? 'PM' : 'AM';
+}
+
+function editBlockTime(e, day, bi) {
+  e.stopPropagation();
+  const btn   = e.currentTarget;
+  const block = scheduleData[day]?.blocks[bi];
+  if (!block) return;
+
+  const sVal = block.time.replace(/ (AM|PM)/i, '');
+  const sAP  = /PM/i.test(block.time) ? 'PM' : 'AM';
+  const eVal = block.timeEnd ? block.timeEnd.replace(/ (AM|PM)/i, '') : '';
+  const eAP  = block.timeEnd && /PM/i.test(block.timeEnd) ? 'PM' : 'AM';
+  const hasEnd = !!block.timeEnd;
+
+  const sid   = `bte-s-${day}-${bi}`;
+  const sapid = `bte-sap-${day}-${bi}`;
+  const eid   = `bte-e-${day}-${bi}`;
+  const eapid = `bte-eap-${day}-${bi}`;
+
+  const span = document.createElement('span');
+  span.className = 'sblock-time-edit';
+  span.innerHTML =
+    `<input class="sblock-time-edit-inp" id="${sid}" value="${sVal}" maxlength="5">` +
+    `<button class="sblock-time-edit-ap" id="${sapid}">${sAP}</button>` +
+    (hasEnd
+      ? `<span style="font-size:9px;color:var(--ink3);font-family:var(--mono)"> – </span>` +
+        `<input class="sblock-time-edit-inp" id="${eid}" value="${eVal}" maxlength="5">` +
+        `<button class="sblock-time-edit-ap" id="${eapid}">${eAP}</button>`
+      : '');
+  btn.replaceWith(span);
+
+  document.getElementById(sapid)?.addEventListener('click', ev => {
+    ev.preventDefault(); ev.stopPropagation();
+    const b = document.getElementById(sapid);
+    if (b) b.textContent = b.textContent === 'AM' ? 'PM' : 'AM';
+  });
+  document.getElementById(eapid)?.addEventListener('click', ev => {
+    ev.preventDefault(); ev.stopPropagation();
+    const b = document.getElementById(eapid);
+    if (b) b.textContent = b.textContent === 'AM' ? 'PM' : 'AM';
+  });
+
+  const commit = () => {
+    const sInp  = document.getElementById(sid);
+    const sApB  = document.getElementById(sapid);
+    const eInp  = document.getElementById(eid);
+    const eApB  = document.getElementById(eapid);
+    if (!sInp) return;
+    const newStart = parseTimeInput(sInp.value, sApB?.textContent || sAP);
+    if (newStart) { pushScheduleUndo(day); block.time = newStart; }
+    if (hasEnd && eInp) {
+      const newEnd = parseTimeInput(eInp.value, eApB?.textContent || eAP);
+      if (newEnd) block.timeEnd = newEnd;
+    }
+    // Re-sort so block moves to its new time slot
+    scheduleData[day].blocks.sort((a, b) => schedToMins(a.time) - schedToMins(b.time));
+    saveSchedule(); saveCurrentWeek();
+    renderSchedule(); renderFocusSchedule(); renderDailyScheduleView();
+  };
+
+  const onKey = ev => {
+    if (ev.key === 'Enter')  { ev.preventDefault(); commit(); }
+    if (ev.key === 'Escape') { renderSchedule(); renderFocusSchedule(); renderDailyScheduleView(); }
+  };
+  const onBlur = () => setTimeout(commit, 200); // allow AM/PM button click to register first
+
+  const sInp = document.getElementById(sid);
+  if (sInp) { sInp.focus(); sInp.select(); sInp.addEventListener('keydown', onKey); sInp.addEventListener('blur', onBlur); }
+  const eInp = document.getElementById(eid);
+  if (eInp) { eInp.addEventListener('keydown', onKey); eInp.addEventListener('blur', onBlur); }
 }
 let _schedDragDay=null, _schedDragIdx=null;
 function schedDragStart(e,day,idx){
@@ -9272,6 +9373,7 @@ function schedSlotDrop(e, day, h) {
   const row = document.getElementById('shr-'+day+'-'+h);
   if (row) row.classList.remove('slot-drag-over');
   if (_schedDragDay !== day || _schedDragIdx === null) return;
+  pushScheduleUndo(day);
   const blocks = scheduleData[day].blocks;
   const dragged = blocks[_schedDragIdx];
   const origMins = schedToMins(dragged.time);
