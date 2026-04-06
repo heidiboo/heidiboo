@@ -1072,12 +1072,20 @@
   .sblock.drag-over { background: rgba(0,0,0,0.05) !important; border-left-color: var(--ink) !important; }
   /* AM/PM picker */
   .sched-time-pick { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
-  /* Single free-text time input (replaces hour + minute dropdown) */
-  .sched-add-time-input {
+  .sched-add-hour {
     font-family: var(--mono); font-size: 10px;
     border: none; border-bottom: 1px solid var(--border);
     background: transparent; color: var(--ink); outline: none;
-    width: 38px; padding: 3px 2px; text-align: center;
+    width: 22px; padding: 3px 0; text-align: center;
+    -moz-appearance: textfield;
+  }
+  .sched-add-hour::-webkit-inner-spin-button,
+  .sched-add-hour::-webkit-outer-spin-button { -webkit-appearance: none; }
+  .sched-add-min {
+    font-family: var(--mono); font-size: 10px;
+    border: none; border-bottom: 1px solid var(--border);
+    background: transparent; color: var(--ink2); outline: none;
+    width: 22px; padding: 3px 0; text-align: center;
   }
   /* Clickable time label on blocks */
   button.sblock-time-btn {
@@ -9038,10 +9046,14 @@ function renderSchedule() {
               <div class="sched-blocks sched-timeline">${blocksHtml}</div>
               <div class="sched-add-row">
                 <div class="sched-time-pick">
-                  <input class="sched-add-time-input" id="sadd-time-${day}" type="text" placeholder="9:00" maxlength="5">
+                  <input class="sched-add-hour" id="sadd-hour-${day}" type="text" inputmode="numeric" maxlength="2" placeholder="7" oninput="schedHourInput(event,'${day}','sadd-min-${day}')" onkeydown="schedHourKey(event)">
+                  <span class="sched-time-sep">:</span>
+                  <input class="sched-add-min" id="sadd-min-${day}" type="text" inputmode="numeric" maxlength="2" placeholder="00" onkeydown="schedMinKey(event,'sadd-hour-${day}')">
                   <button class="sched-ampm-btn" id="sadd-ampm-${day}" onclick="toggleAmPm('${day}')">AM</button>
                   <span class="sched-time-arrow">→</span>
-                  <input class="sched-add-time-input" id="sadd-etime-${day}" type="text" placeholder="—" maxlength="5">
+                  <input class="sched-add-hour" id="sadd-ehour-${day}" type="text" inputmode="numeric" maxlength="2" placeholder="—" oninput="schedHourInput(event,'${day}','sadd-emin-${day}')" onkeydown="schedHourKey(event)">
+                  <span class="sched-time-sep">:</span>
+                  <input class="sched-add-min" id="sadd-emin-${day}" type="text" inputmode="numeric" maxlength="2" placeholder="00" onkeydown="schedMinKey(event,'sadd-ehour-${day}')">
                   <button class="sched-ampm-btn" id="sadd-eampm-${day}" onclick="toggleEndAmPm('${day}')">AM</button>
                 </div>
                 <input class="sched-add-label" id="sadd-label-${day}" placeholder="Add block..."
@@ -9174,20 +9186,51 @@ function renderFocusSchedule() {
 
 function saveBlockEdit(day,idx,field,val){ scheduleData[day].blocks[idx][field]=val; saveSchedule(); saveCurrentWeek(); }
 function deleteBlock(day,idx){ pushScheduleUndo(day); scheduleData[day].blocks.splice(idx,1); saveSchedule(); saveCurrentWeek(); renderSchedule(); renderFocusSchedule(); renderDailyScheduleView(); }
+// Auto-advance hour → minute when 2 digits entered or value ≥ 3
+function schedHourInput(e, day, minId) {
+  const inp = e.currentTarget;
+  const v = inp.value.replace(/\D/g,'');
+  inp.value = v;
+  // Auto-advance: typed 2 digits, or first digit ≥ 2 (can only be 2-9 for 1-digit hour like 2–9)
+  if (v.length === 2 || (v.length === 1 && parseInt(v) >= 2 && parseInt(v) <= 9)) {
+    // For 2-digit: auto-advance immediately. For single digit ≥2: only advance if it can't be a valid 2-digit start (1x is valid, 2-9 is max)
+    if (v.length === 2 || parseInt(v) > 1) {
+      const minEl = document.getElementById(minId);
+      if (minEl) { minEl.focus(); minEl.select(); }
+    }
+  }
+}
+function schedHourKey(e) {
+  if (!/[\d]|Backspace|Tab|ArrowLeft|ArrowRight/.test(e.key)) e.preventDefault();
+}
+function schedMinKey(e, hourId) {
+  if (!/[\d]|Backspace|Tab|ArrowLeft|ArrowRight/.test(e.key)) e.preventDefault();
+  // Backspace on empty min → back to hour
+  if (e.key === 'Backspace' && e.currentTarget.value === '') {
+    const hourEl = document.getElementById(hourId);
+    if (hourEl) { hourEl.focus(); hourEl.select(); }
+  }
+}
+
 function addBlock(day){
-  const ti  = document.getElementById('sadd-time-'+day);
-  const eti = document.getElementById('sadd-etime-'+day);
+  const h   = document.getElementById('sadd-hour-'+day);
+  const m   = document.getElementById('sadd-min-'+day);
   const ap  = document.getElementById('sadd-ampm-'+day);
+  const eh  = document.getElementById('sadd-ehour-'+day);
+  const em  = document.getElementById('sadd-emin-'+day);
   const eap = document.getElementById('sadd-eampm-'+day);
   const l   = document.getElementById('sadd-label-'+day);
   if (!l || !l.value.trim()) return;
-  const period  = ap ? ap.textContent.trim() : 'AM';
-  const eperiod = eap ? eap.textContent.trim() : 'AM';
-  const timeStr = parseTimeInput(ti?.value, period) || '7:00 AM';
+  const hr     = h?.value ? parseInt(h.value) : 7;
+  const mn     = m?.value ? m.value.padStart(2,'0') : '00';
+  const period = ap?.textContent.trim() || 'AM';
+  const timeStr = `${hr}:${mn} ${period}`;
   const newBlock = {type:'routine', time:timeStr, label:l.value.trim()};
-  if (eti?.value && eti.value !== '—') {
-    const endStr = parseTimeInput(eti.value, eperiod);
-    if (endStr) newBlock.timeEnd = endStr;
+  if (eh?.value) {
+    const ehr    = parseInt(eh.value);
+    const emn    = em?.value ? em.value.padStart(2,'0') : '00';
+    const eperiod = eap?.textContent.trim() || 'AM';
+    newBlock.timeEnd = `${ehr}:${emn} ${eperiod}`;
   }
   pushScheduleUndo(day);
   const blocks = scheduleData[day].blocks;
@@ -9195,8 +9238,10 @@ function addBlock(day){
   let insertIdx = blocks.findIndex(b => schedToMins(b.time) > newMins);
   if (insertIdx === -1) insertIdx = blocks.length;
   blocks.splice(insertIdx, 0, newBlock);
-  if (ti)  ti.value  = '';
-  if (eti) eti.value = '';
+  if (h) h.value = '';
+  if (m) m.value = '';
+  if (eh) eh.value = '';
+  if (em) em.value = '';
   l.value = '';
   saveSchedule(); saveCurrentWeek(); renderSchedule(); renderFocusSchedule(); renderDailyScheduleView();
 }
