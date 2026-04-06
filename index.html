@@ -1243,6 +1243,15 @@
     background: rgba(0,0,0,0.25); border-radius: 1px;
   }
   body.resizing-block { user-select: none; }
+  #resize-time-tip {
+    position: fixed; z-index: 9999; pointer-events: none;
+    background: var(--ink); color: #F9F7F3;
+    font-family: var(--mono); font-size: 11px; font-weight: 600;
+    padding: 4px 9px; border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.22);
+    white-space: nowrap; transform: translateY(-50%);
+    transition: top 0.05s, left 0.05s;
+  }
   /* Spanning time-range blocks */
   .sblock-span { align-items: flex-start; padding-top: 8px; flex-direction: column; gap: 4px; }
   .sblock-span .sblock-drag { align-self: flex-start; }
@@ -9220,6 +9229,18 @@ document.addEventListener('keydown', e => {
 // ── BLOCK RESIZE — pixel-delta (works even when spanned rows are hidden) ────
 const PX_PER_HOUR = 32;
 let _resizeState = null, _resizeRafId = null;
+function _showResizeTip(x, y, text) {
+  let tip = document.getElementById('resize-time-tip');
+  if (!tip) { tip = document.createElement('div'); tip.id = 'resize-time-tip'; document.body.appendChild(tip); }
+  tip.textContent = text;
+  tip.style.left = (x + 14) + 'px';
+  tip.style.top  = y + 'px';
+}
+function _removeResizeTip() {
+  const tip = document.getElementById('resize-time-tip');
+  if (tip) tip.remove();
+}
+
 function schedResizeStart(e, day, bi, edge) {
   e.preventDefault(); e.stopPropagation();
   const blockEl = e.currentTarget.closest('.sblock');
@@ -9232,6 +9253,8 @@ function schedResizeStart(e, day, bi, edge) {
   _resizeState = { day, bi, edge, blockEl, startY: e.clientY, origStartM, origEndM };
   document.body.classList.add('resizing-block');
   document.body.style.cursor = edge === 'top' ? 'n-resize' : 's-resize';
+  const initLabel = edge === 'bottom' ? minsToTime(origEndM) : minsToTime(origStartM);
+  _showResizeTip(e.clientX, e.clientY, initLabel);
   document.addEventListener('mousemove', schedResizeMove);
   document.addEventListener('mouseup', schedResizeEnd);
 }
@@ -9244,12 +9267,13 @@ function schedResizeMove(e) {
     const { day, bi, edge, blockEl, startY, origStartM, origEndM } = _resizeState;
     const block = scheduleData[day]?.blocks[bi];
     if (!block) return;
-    // Snap to 15-min increments; PX_PER_HOUR px = 60 min
     const rawDelta  = (e.clientY - startY) / PX_PER_HOUR * 60;
     const deltaMins = Math.round(rawDelta / 15) * 15;
+    let tipTime;
     if (edge === 'bottom') {
       const newEndM = Math.max(origStartM + 15, Math.min(origEndM + deltaMins, 24 * 60));
       block.timeEnd = minsToTime(newEndM);
+      tipTime = block.timeEnd;
       if (blockEl) {
         blockEl.style.height    = ((newEndM - origStartM) / 60 * PX_PER_HOUR) + 'px';
         blockEl.style.minHeight = 'unset';
@@ -9258,12 +9282,14 @@ function schedResizeMove(e) {
     } else {
       const newStartM = Math.max(0, Math.min(origStartM + deltaMins, origEndM - 15));
       block.time = minsToTime(newStartM);
+      tipTime = block.time;
       if (blockEl) {
         blockEl.style.height    = ((origEndM - newStartM) / 60 * PX_PER_HOUR) + 'px';
         blockEl.style.minHeight = 'unset';
         blockEl.style.overflow  = 'hidden';
       }
     }
+    _showResizeTip(e.clientX, e.clientY, tipTime);
   });
 }
 function schedResizeEnd() {
@@ -9272,6 +9298,7 @@ function schedResizeEnd() {
   document.removeEventListener('mouseup', schedResizeEnd);
   document.body.classList.remove('resizing-block');
   document.body.style.cursor = '';
+  _removeResizeTip();
   if (_resizeRafId) { cancelAnimationFrame(_resizeRafId); _resizeRafId = null; }
   if (_resizeState.blockEl) _resizeState.blockEl.draggable = true;
   _resizeState = null;
