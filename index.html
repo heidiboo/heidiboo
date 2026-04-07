@@ -1488,6 +1488,12 @@
     display: flex; align-items: center; gap: 8px;
     margin-bottom: 12px;
   }
+  .fin-section-drag {
+    color: var(--ink3); cursor: grab; font-size: 13px; line-height: 1;
+    opacity: 0; transition: opacity 0.15s; user-select: none; padding: 0 2px;
+  }
+  .fin-section-drag:active { cursor: grabbing; }
+  .fin-section-header:hover .fin-section-drag { opacity: 1; }
   .fin-section-title {
     font-size: 11px; font-weight: 600; letter-spacing: 0.09em;
     text-transform: uppercase; font-family: var(--mono); color: var(--ink2);
@@ -1500,6 +1506,8 @@
     opacity: 0; transition: opacity 0.15s;
   }
   .fin-section-header:hover .fin-section-del { opacity: 1; }
+  .fin-section.fin-drag-over { border-top: 2px solid var(--ink); margin-top: -2px; }
+  .fin-section.fin-dragging { opacity: 0.4; }
   .fin-links { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .fin-link-chip {
     display: inline-flex; align-items: center; gap: 8px;
@@ -9924,8 +9932,14 @@ function renderFinances() {
   if (!wrap) return;
   const sections = getFinanceLinks();
   wrap.innerHTML = sections.map(sec => `
-    <div class="fin-section" id="fin-sec-${sec.id}">
+    <div class="fin-section" id="fin-sec-${sec.id}" draggable="true"
+      ondragstart="finSecDragStart(event,'${sec.id}')"
+      ondragover="finSecDragOver(event,'${sec.id}')"
+      ondragleave="finSecDragLeave(event)"
+      ondrop="finSecDrop(event,'${sec.id}')"
+      ondragend="finSecDragEnd()">
       <div class="fin-section-header">
+        <span class="fin-section-drag" title="Drag to reorder">⠿</span>
         <span class="fin-section-title" ondblclick="renameFinanceSection('${sec.id}')" title="Double-click to rename">${escHtml(sec.name)}</span>
         <button class="fin-section-del" onclick="deleteFinanceSection('${sec.id}')" title="Delete section">×</button>
       </div>
@@ -9943,6 +9957,40 @@ function renderFinances() {
       </div>
     </div>
   `).join('');
+}
+
+// ── Finance section drag-to-reorder ──────────────────────────────────────────
+let _finDragId = null;
+function finSecDragStart(e, secId) {
+  _finDragId = secId;
+  e.dataTransfer.effectAllowed = 'move';
+  setTimeout(() => document.getElementById('fin-sec-'+secId)?.classList.add('fin-dragging'), 0);
+}
+function finSecDragOver(e, secId) {
+  if (!_finDragId || _finDragId === secId) return;
+  e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+  document.querySelectorAll('.fin-section.fin-drag-over').forEach(el => el.classList.remove('fin-drag-over'));
+  document.getElementById('fin-sec-'+secId)?.classList.add('fin-drag-over');
+}
+function finSecDragLeave(e) {
+  e.currentTarget.classList.remove('fin-drag-over');
+}
+function finSecDrop(e, targetId) {
+  e.preventDefault();
+  if (!_finDragId || _finDragId === targetId) return;
+  const sections = getFinanceLinks();
+  const fromIdx = sections.findIndex(s => s.id === _finDragId);
+  const toIdx   = sections.findIndex(s => s.id === targetId);
+  if (fromIdx < 0 || toIdx < 0) return;
+  const [moved] = sections.splice(fromIdx, 1);
+  sections.splice(toIdx, 0, moved);
+  saveFinanceLinks(sections);
+  renderFinances();
+}
+function finSecDragEnd() {
+  document.querySelectorAll('.fin-section.fin-drag-over, .fin-section.fin-dragging')
+    .forEach(el => el.classList.remove('fin-drag-over','fin-dragging'));
+  _finDragId = null;
 }
 
 function doingMyFinances() {
