@@ -1020,7 +1020,14 @@
   .sblock:hover { background: rgba(0,0,0,0.02); }
   .sblock-time {
     font-family: var(--mono); font-size: 9px; color: var(--ink3);
-    min-width: 80px; flex-shrink: 0; letter-spacing: 0.02em;
+    letter-spacing: 0.02em; flex-shrink: 0;
+    /* Hidden by default — row's left label already shows the hour.
+       Revealed on hover so user can still click to edit. */
+    opacity: 0; max-width: 0; overflow: hidden;
+    transition: opacity 0.15s, max-width 0.15s;
+  }
+  .sblock:hover .sblock-time {
+    opacity: 1; max-width: 80px;
   }
   .sblock-label {
     font-size: 12px; color: var(--ink); flex: 1;
@@ -8988,6 +8995,9 @@ function renderSchedule() {
         }
         spanClass = ' sblock-span';
       }
+      // Span blocks always show the time range (end time isn't shown by the row label).
+      // Non-span blocks use .sblock-time which is hidden by default and revealed on hover
+      // via CSS — so the left hour label isn't duplicated, but clicking is still possible.
       const timeLbl = b.timeEnd
         ? `${escHtml(b.time)} – ${escHtml(b.timeEnd)}`
         : escHtml(b.time);
