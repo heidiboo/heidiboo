@@ -2456,8 +2456,43 @@ function syncToSupabase(key, val) {
         );
       } catch(e) { console.warn('Supabase sync error:', k, e.message); }
     }
-  }, 30000); // flush every 30 seconds max
+  }, 8000); // flush every 8 seconds max (was 30s — shorter window = less data loss risk)
 }
+
+// ── Emergency flush on page close/refresh ─────────────────────────────────
+// Uses fetch keepalive so the request completes even after the page unloads.
+// This prevents data loss when the tab is closed or hard-refreshed before
+// the 8s throttle timer fires.
+let _supaAccessToken = null; // stored after successful login
+window.addEventListener('beforeunload', () => {
+  const entries = Object.entries(_supaQueue);
+  if (!entries.length) return;
+  clearTimeout(_supaFlushTimer); _supaFlushTimer = null;
+  for (const k in _supaQueue) delete _supaQueue[k];
+  const token = _supaAccessToken || SUPA_KEY;
+  entries.forEach(([k, v]) => {
+    const mp = SUPA_MAP[k]; if (!mp) return;
+    let row, onConflict;
+    if      (mp.table === 'tasks')    { row = { id: mp.id, date: k, data: v }; onConflict = 'id'; }
+    else if (mp.table === 'docs')     { row = { id: mp.id, data: v };           onConflict = 'id'; }
+    else if (mp.table === 'projects') { row = { id: mp.id, data: v };           onConflict = 'id'; }
+    else if (mp.table === 'schedule') { row = { week_key: mp.id, data: v };     onConflict = 'week_key'; }
+    else                              { row = { key: mp.id, value: v };         onConflict = 'key'; }
+    try {
+      fetch(`${SUPA_URL}/rest/v1/${mp.table}?on_conflict=${onConflict}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPA_KEY,
+          'Authorization': 'Bearer ' + token,
+          'Prefer': 'return=minimal,resolution=merge-duplicates'
+        },
+        body: JSON.stringify(row),
+        keepalive: true  // continues after page unloads
+      });
+    } catch(e) { /* best-effort */ }
+  });
+});
 
 async function loadFromSupabase() {
   // Pull all tables in parallel
@@ -2868,6 +2903,7 @@ async function initAuth() {
       return;
     }
     localStorage.setItem('dash_authed', '1');
+    _supaAccessToken = session.access_token || null;
     showApp();
     return;
   }
@@ -2889,6 +2925,7 @@ async function initAuth() {
       }
       window.history.replaceState(null, '', window.location.pathname);
       localStorage.setItem('dash_authed', '1');
+      _supaAccessToken = session.access_token || null;
       showApp();
     }
   });
