@@ -2576,45 +2576,50 @@ async function loadFromSupabase() {
     docsRes.data.forEach(row => {
       const supaVal = row.data;
       const localVal = loadLocal(row.id, null);
-      // For the main docs array: merge by id, prefer newer updatedTs
+      // For the main docs array: always merge so neither local nor Supabase data is lost
       if (row.id === 'docs') {
-        if (!Array.isArray(supaVal) || supaVal.length === 0) {
-          // Supabase has nothing — keep local as-is, and re-push local to Supabase
-          if (Array.isArray(localVal) && localVal.length > 0) {
-            console.warn('[sync] Supabase docs is empty but local has', localVal.length, 'docs — keeping local and re-queuing sync');
-            syncToSupabase('docs', localVal);
-            return;
-          }
+        const supaArr = Array.isArray(supaVal) ? supaVal : [];
+        const localArr = Array.isArray(localVal) ? localVal : [];
+        if (supaArr.length === 0 && localArr.length > 0) {
+          // Supabase empty, local has data — keep local and re-push up
+          console.warn('[sync] Supabase docs empty, local has', localArr.length, '— re-pushing to Supabase');
+          syncToSupabase('docs', localArr);
+          return;
         }
-        if (Array.isArray(supaVal) && Array.isArray(localVal) && localVal.length > 0) {
-          // Merge: union by doc id, newer updatedTs wins
+        if (supaArr.length > 0) {
+          // Merge: union by doc id, newer updatedTs wins (Supabase wins ties)
           const merged = {};
-          localVal.forEach(d => { if (d && d.id) merged[d.id] = d; });
-          supaVal.forEach(d => {
-            if (!d || !d.id) return;
+          localArr.forEach(d => { if (d?.id) merged[d.id] = d; });
+          supaArr.forEach(d => {
+            if (!d?.id) return;
             const loc = merged[d.id];
             if (!loc || (d.updatedTs || 0) >= (loc.updatedTs || 0)) merged[d.id] = d;
           });
           const mergedArr = Object.values(merged);
           saveLocal('docs', mergedArr);
-          if (mergedArr.length > supaVal.length) syncToSupabase('docs', mergedArr); // push recovered docs back
+          // If merge found local-only docs, push them back up to Supabase
+          if (mergedArr.length > supaArr.length) syncToSupabase('docs', mergedArr);
           return;
         }
-      }
-      // For folders: union merge by id (Supabase wins on conflict)
-      if ((row.id === 'docFolders' || row.id === 'trashedDocs' || row.id === 'trashedFolders') &&
-          Array.isArray(supaVal) && Array.isArray(localVal) && localVal.length > 0) {
-        if (supaVal.length === 0) {
-          syncToSupabase(row.id, localVal); // re-push
-          return;
-        }
-        const merged = {};
-        localVal.forEach(f => { if (f && f.id) merged[f.id] = f; });
-        supaVal.forEach(f => { if (f && f.id) merged[f.id] = f; });
-        saveLocal(row.id, Object.values(merged));
+        // Both empty — nothing to do
         return;
       }
-      saveLocal(row.id, supaVal);
+      // For folders: union merge so no folder is lost
+      if (['docFolders','trashedDocs','trashedFolders'].includes(row.id)) {
+        const supaArr = Array.isArray(supaVal) ? supaVal : [];
+        const localArr = Array.isArray(localVal) ? localVal : [];
+        if (supaArr.length === 0 && localArr.length > 0) { syncToSupabase(row.id, localArr); return; }
+        if (supaArr.length > 0 && localArr.length > 0) {
+          const merged = {};
+          localArr.forEach(f => { if (f?.id) merged[f.id] = f; });
+          supaArr.forEach(f => { if (f?.id) merged[f.id] = f; });
+          saveLocal(row.id, Object.values(merged));
+          return;
+        }
+        if (supaArr.length > 0) { saveLocal(row.id, supaArr); return; }
+        return;
+      }
+      if (supaVal != null) saveLocal(row.id, supaVal);
     });
   }
   // projects
@@ -2703,6 +2708,8 @@ function drRecoverFromSupabase() {
   const btn = document.getElementById('dr-recover-btn');
   const docsData = btn?._docsData;
   const tasksData = btn?._tasksData;
+  let mergedDocs = null;
+
   if (docsData) {
     docsData.forEach(row => {
       const supaVal = row.data;
@@ -2715,7 +2722,8 @@ function drRecoverFromSupabase() {
           const loc = merged[d.id];
           if (!loc || (d.updatedTs || 0) >= (loc.updatedTs || 0)) merged[d.id] = d;
         });
-        saveLocal('docs', Object.values(merged));
+        mergedDocs = Object.values(merged);
+        saveLocal('docs', mergedDocs);
       } else if (supaVal != null) { saveLocal(row.id, supaVal); }
     });
   }
@@ -2735,8 +2743,18 @@ function drRecoverFromSupabase() {
       } else if (supaVal != null) { saveLocal(row.date, supaVal); }
     });
   }
-  alert('Done! Refreshing…');
-  location.reload();
+
+  // Update in-memory state directly — no reload needed
+  if (mergedDocs) {
+    docs = mergedDocs;
+    renderDocs();
+    if (typeof renderFolders === 'function') renderFolders();
+  }
+  const res = document.getElementById('dr-supa-result');
+  if (res) res.textContent = `✅ Done — ${mergedDocs ? mergedDocs.length : '?'} docs now in your browser. Check the Docs tab.`;
+  if (btn) btn.style.display = 'none';
+  document.getElementById('docs-recovery-modal')?.remove();
+  switchTab('docs');
 }
 
 function exportAllDataJSON() {
