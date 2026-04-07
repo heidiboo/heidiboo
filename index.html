@@ -2442,6 +2442,14 @@ function loadLocal(key, def) { try { return JSON.parse(localStorage.getItem('das
 
 // save() — writes to localStorage immediately, then syncs to Supabase in background
 function save(key, val) {
+  // Hard guard: never let the docs array shrink to zero if we already have docs
+  if (key === 'docs' && Array.isArray(val) && val.length === 0) {
+    const existing = loadLocal('docs', []);
+    if (Array.isArray(existing) && existing.length > 0) {
+      console.error('[GUARD] Blocked attempt to wipe', existing.length, 'docs — keeping existing data');
+      return;
+    }
+  }
   saveLocal(key, val);
   syncToSupabase(key, val);
 }
@@ -2747,11 +2755,14 @@ function drRecoverFromSupabase() {
   // Update in-memory state directly — no reload needed
   if (mergedDocs) {
     docs = mergedDocs;
+    saveLocal('docs', mergedDocs);
+    // Push the merged result back to Supabase immediately (don't wait for 8s throttle)
+    syncToSupabase('docs', mergedDocs);
     renderDocs();
     if (typeof renderFolders === 'function') renderFolders();
   }
   const res = document.getElementById('dr-supa-result');
-  if (res) res.textContent = `✅ Done — ${mergedDocs ? mergedDocs.length : '?'} docs now in your browser. Check the Docs tab.`;
+  if (res) res.textContent = `✅ Done — ${mergedDocs ? mergedDocs.length : '?'} docs restored. Check the Docs tab.`;
   if (btn) btn.style.display = 'none';
   document.getElementById('docs-recovery-modal')?.remove();
   switchTab('docs');
@@ -5186,7 +5197,13 @@ function autoSaveDoc() {
   const now = new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
   const idx = docs.findIndex(d => d.id === currentDocId);
   if (idx > -1) {
-    docs[idx] = { ...docs[idx], title, body, project, updatedAt: now, updatedTs: Date.now() };
+    const existingBody = docs[idx].body || '';
+    // Never overwrite a real body with an empty editor — protects against content being
+    // wiped when a doc is opened on a device where Supabase had no body data
+    const safeBody = (!body || body === '<br>' || body === '<p><br></p>') && existingBody.length > 100
+      ? existingBody
+      : body;
+    docs[idx] = { ...docs[idx], title, body: safeBody, project, updatedAt: now, updatedTs: Date.now() };
     save('docs', docs);
     renderDocs();
     // Flash "Saved" indicator
