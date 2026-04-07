@@ -9179,25 +9179,27 @@ function renderSchedule() {
             <div class="sched-blocks sched-timeline">${blocksHtml}</div>
             <div class="sched-add-row">
               <div class="sched-time-pick">
-                <input class="sched-add-hour" id="sadd-hour-${day}" type="number" min="1" max="12" placeholder="7">
+                <input class="sched-add-hour" id="sadd-hour-${day}" type="text" inputmode="numeric" maxlength="2" placeholder="7"
+                  oninput="schedHourInput(event,'sadd-min-${day}')"
+                  onkeydown="schedHourKey(event,'sadd-min-${day}')">
                 <span class="sched-time-sep">:</span>
-                <select class="sched-add-min" id="sadd-min-${day}">
-                  <option value="00">00</option>
-                  <option value="15">15</option>
-                  <option value="30">30</option>
-                  <option value="45">45</option>
-                </select>
-                <button class="sched-ampm-btn" id="sadd-ampm-${day}" onclick="toggleAmPm('${day}')">AM</button>
+                <input class="sched-add-min" id="sadd-min-${day}" type="text" inputmode="numeric" maxlength="2" placeholder="00"
+                  oninput="schedMinInput(event)"
+                  onkeydown="schedMinKey(event,'sadd-hour-${day}','sadd-ampm-${day}',null)">
+                <button class="sched-ampm-btn" id="sadd-ampm-${day}" tabindex="0"
+                  onclick="toggleAmPm('${day}')"
+                  onkeydown="schedAmpmKey(event,'${day}',false)">AM</button>
                 <span class="sched-time-arrow">→</span>
-                <input class="sched-add-hour" id="sadd-ehour-${day}" type="number" min="1" max="12" placeholder="—">
+                <input class="sched-add-hour" id="sadd-ehour-${day}" type="text" inputmode="numeric" maxlength="2" placeholder="—"
+                  oninput="schedHourInput(event,'sadd-emin-${day}')"
+                  onkeydown="schedEndHourKey(event,'${day}')">
                 <span class="sched-time-sep">:</span>
-                <select class="sched-add-min" id="sadd-emin-${day}">
-                  <option value="00">00</option>
-                  <option value="15">15</option>
-                  <option value="30">30</option>
-                  <option value="45">45</option>
-                </select>
-                <button class="sched-ampm-btn" id="sadd-eampm-${day}" onclick="toggleEndAmPm('${day}')">AM</button>
+                <input class="sched-add-min" id="sadd-emin-${day}" type="text" inputmode="numeric" maxlength="2" placeholder="00"
+                  oninput="schedMinInput(event)"
+                  onkeydown="schedMinKey(event,'sadd-ehour-${day}','sadd-eampm-${day}','sadd-label-${day}')">
+                <button class="sched-ampm-btn" id="sadd-eampm-${day}" tabindex="0"
+                  onclick="toggleEndAmPm('${day}')"
+                  onkeydown="schedAmpmKey(event,'${day}',true)">AM</button>
               </div>
               <input class="sched-add-label" id="sadd-label-${day}" placeholder="Add block..."
                 onkeydown="if(event.key==='Enter'){event.preventDefault();addBlock('${day}')}">
