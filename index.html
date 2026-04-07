@@ -1963,7 +1963,10 @@
           <div id="docs-view-all">
             <div class="section-header">
               <div id="docs-view-title" class="section-title">All Docs</div>
-              <button class="btn btn-primary" id="docs-new-btn" onclick="openDoc(null)">+ New Doc</button>
+              <div style="display:flex;gap:8px;align-items:center">
+                <button class="btn btn-primary" id="docs-new-btn" onclick="openDoc(null)">+ New Doc</button>
+                <button class="btn" onclick="exportAllDataJSON()" title="Download backup of all your data" style="font-size:11px;padding:5px 10px;border:1px solid var(--border);background:transparent;color:var(--ink2)">⬇ Backup</button>
+              </div>
             </div>
             <div id="docs-list" class="docs-grid"></div>
           </div>
@@ -2113,12 +2116,27 @@
   </div>
 
   <!-- Allowlist -->
-  <div style="padding:20px 28px 28px">
+  <div style="padding:20px 28px 0">
     <div style="font-family:'Courier New',monospace;font-size:8px;letter-spacing:0.12em;text-transform:uppercase;color:#888;margin-bottom:12px">Approved Emails</div>
     <div id="cc-allowlist" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px"></div>
     <div style="display:flex;gap:8px">
       <input id="cc-new-email" type="email" placeholder="Add email..." style="flex:1;padding:8px 12px;border:1px solid rgba(0,0,0,0.12);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#fff;color:#1A1A1A;outline:none" onkeydown="if(event.key==='Enter')ccAddEmail()">
       <button onclick="ccAddEmail()" style="padding:8px 14px;background:#1A1A1A;color:#F9F7F3;border:none;border-radius:6px;font-size:12px;cursor:pointer">Add</button>
+    </div>
+  </div>
+
+  <!-- Data Backup & Recovery -->
+  <div style="padding:20px 28px 28px;border-top:1px solid rgba(0,0,0,0.08);margin-top:20px">
+    <div style="font-family:'Courier New',monospace;font-size:8px;letter-spacing:0.12em;text-transform:uppercase;color:#888;margin-bottom:12px">Data Backup & Recovery</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button onclick="exportAllDataJSON()" style="padding:8px 14px;background:#1A1A1A;color:#F9F7F3;border:none;border-radius:6px;font-size:12px;cursor:pointer;text-align:left">⬇ Download backup JSON</button>
+      <label style="padding:8px 14px;border:1px solid rgba(0,0,0,0.12);border-radius:6px;font-size:12px;cursor:pointer;color:#555;background:#fff">
+        ⬆ Restore from backup JSON
+        <input type="file" accept=".json" style="display:none" onchange="importFromJSON(this.files[0]);this.value=''">
+      </label>
+      <button onclick="checkSupabaseDocs()" style="padding:8px 14px;border:1px solid rgba(0,0,0,0.12);border-radius:6px;font-size:12px;cursor:pointer;color:#555;background:#fff;text-align:left">🔍 Check Supabase docs</button>
+      <pre id="cc-supa-check" style="font-size:10px;color:#555;background:rgba(0,0,0,0.04);padding:10px;border-radius:6px;white-space:pre-wrap;word-break:break-word;display:none;max-height:200px;overflow-y:auto"></pre>
+      <button id="cc-supa-recover-btn" onclick="recoverFromSupabase()" style="display:none;padding:8px 14px;background:#c44;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer">↩ Recover docs from Supabase into local</button>
     </div>
   </div>
 </div>
@@ -2519,13 +2537,81 @@ async function loadFromSupabase() {
     sb.from('settings').select('*'),
   ]);
 
-  // tasks
+  // tasks — protect local data from empty Supabase rows
   if (tasksRes.data) {
-    tasksRes.data.forEach(row => saveLocal(row.date, row.data));
+    tasksRes.data.forEach(row => {
+      const supaVal = row.data;
+      const localVal = loadLocal(row.date, null);
+      // Don't overwrite non-empty local taskDays with an empty Supabase value
+      if (row.date === 'taskDays' && Array.isArray(supaVal) && supaVal.length === 0 &&
+          Array.isArray(localVal) && localVal.length > 0) {
+        console.warn('[sync] Supabase taskDays is empty but local has', localVal.length, 'days — keeping local');
+        syncToSupabase('taskDays', localVal);
+        return;
+      }
+      // Merge taskDays by date key (union, prefer whichever has more tasks)
+      if (row.date === 'taskDays' && Array.isArray(supaVal) && Array.isArray(localVal) && localVal.length > 0) {
+        const merged = {};
+        localVal.forEach(d => { if (d && d.date) merged[d.date] = d; });
+        supaVal.forEach(d => {
+          if (!d || !d.date) return;
+          const loc = merged[d.date];
+          // Keep whichever has more tasks (Supabase wins ties)
+          if (!loc || (d.tasks?.length || 0) >= (loc.tasks?.length || 0)) merged[d.date] = d;
+        });
+        const mergedArr = Object.values(merged).sort((a,b) => a.date < b.date ? 1 : -1);
+        saveLocal('taskDays', mergedArr);
+        if (mergedArr.length > supaVal.length) syncToSupabase('taskDays', mergedArr);
+        return;
+      }
+      saveLocal(row.date, supaVal);
+    });
   }
-  // docs
+  // docs — smart merge so Supabase can't wipe local data that hasn't synced yet
   if (docsRes.data) {
-    docsRes.data.forEach(row => saveLocal(row.id, row.data));
+    docsRes.data.forEach(row => {
+      const supaVal = row.data;
+      const localVal = loadLocal(row.id, null);
+      // For the main docs array: merge by id, prefer newer updatedTs
+      if (row.id === 'docs') {
+        if (!Array.isArray(supaVal) || supaVal.length === 0) {
+          // Supabase has nothing — keep local as-is, and re-push local to Supabase
+          if (Array.isArray(localVal) && localVal.length > 0) {
+            console.warn('[sync] Supabase docs is empty but local has', localVal.length, 'docs — keeping local and re-queuing sync');
+            syncToSupabase('docs', localVal);
+            return;
+          }
+        }
+        if (Array.isArray(supaVal) && Array.isArray(localVal) && localVal.length > 0) {
+          // Merge: union by doc id, newer updatedTs wins
+          const merged = {};
+          localVal.forEach(d => { if (d && d.id) merged[d.id] = d; });
+          supaVal.forEach(d => {
+            if (!d || !d.id) return;
+            const loc = merged[d.id];
+            if (!loc || (d.updatedTs || 0) >= (loc.updatedTs || 0)) merged[d.id] = d;
+          });
+          const mergedArr = Object.values(merged);
+          saveLocal('docs', mergedArr);
+          if (mergedArr.length > supaVal.length) syncToSupabase('docs', mergedArr); // push recovered docs back
+          return;
+        }
+      }
+      // For folders: union merge by id (Supabase wins on conflict)
+      if ((row.id === 'docFolders' || row.id === 'trashedDocs' || row.id === 'trashedFolders') &&
+          Array.isArray(supaVal) && Array.isArray(localVal) && localVal.length > 0) {
+        if (supaVal.length === 0) {
+          syncToSupabase(row.id, localVal); // re-push
+          return;
+        }
+        const merged = {};
+        localVal.forEach(f => { if (f && f.id) merged[f.id] = f; });
+        supaVal.forEach(f => { if (f && f.id) merged[f.id] = f; });
+        saveLocal(row.id, Object.values(merged));
+        return;
+      }
+      saveLocal(row.id, supaVal);
+    });
   }
   // projects
   if (projRes.data) {
@@ -2543,6 +2629,152 @@ async function loadFromSupabase() {
   if (settingsRes.data) {
     settingsRes.data.forEach(row => saveLocal(row.key, row.value));
   }
+}
+
+// ---- DATA BACKUP / RESTORE ----
+function exportAllDataJSON() {
+  const backup = {
+    exportedAt: new Date().toISOString(),
+    version: 1,
+    data: {}
+  };
+  const keys = ['docs','docFolders','trashedDocs','trashedFolders','lockedDocs','projects',
+    'taskDays','scheduleData','scheduleBaseline','scheduleHistory','workGoals','personalGoals',
+    'notes','todos','skills','financeLinks','globalReminders'];
+  keys.forEach(k => {
+    const v = loadLocal(k, null);
+    if (v !== null) backup.data[k] = v;
+  });
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'heidiboo-backup-' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importFromJSON(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const backup = JSON.parse(e.target.result);
+      if (!backup.data) { alert('Invalid backup file'); return; }
+      const keys = Object.keys(backup.data);
+      if (!confirm(`Restore ${keys.length} data collections from backup dated ${backup.exportedAt?.slice(0,10) || 'unknown'}?\n\nThis will merge with existing data — docs will be unioned, not replaced.`)) return;
+      let docsRestored = 0;
+      keys.forEach(k => {
+        const backupVal = backup.data[k];
+        if (k === 'docs' && Array.isArray(backupVal)) {
+          const localDocs = loadLocal('docs', []);
+          const merged = {};
+          localDocs.forEach(d => { if (d && d.id) merged[d.id] = d; });
+          backupVal.forEach(d => {
+            if (!d || !d.id) return;
+            const loc = merged[d.id];
+            if (!loc || (d.updatedTs || 0) > (loc.updatedTs || 0)) { merged[d.id] = d; docsRestored++; }
+          });
+          const mergedArr = Object.values(merged);
+          saveLocal('docs', mergedArr);
+          syncToSupabase('docs', mergedArr);
+        } else {
+          saveLocal(k, backupVal);
+          syncToSupabase(k, backupVal);
+        }
+      });
+      alert(`Restore complete! ${docsRestored} docs merged. Refresh the page to see changes.`);
+    } catch(err) {
+      alert('Failed to parse backup: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+async function checkSupabaseDocs() {
+  const el = document.getElementById('cc-supa-check');
+  if (el) { el.style.display = 'block'; el.textContent = 'Checking Supabase…'; }
+  try {
+    const [{ data: docsData, error: docsErr }, { data: tasksData, error: tasksErr }] = await Promise.all([
+      sb.from('docs').select('*'),
+      sb.from('tasks').select('*')
+    ]);
+    if (docsErr) throw docsErr;
+    const docsRow = docsData?.find(r => r.id === 'docs');
+    const foldersRow = docsData?.find(r => r.id === 'docFolders');
+    const docsArr = Array.isArray(docsRow?.data) ? docsRow.data : [];
+    const foldersArr = Array.isArray(foldersRow?.data) ? foldersRow.data : [];
+    const taskDaysRow = tasksData?.find(r => r.date === 'taskDays');
+    const supaTaskDays = Array.isArray(taskDaysRow?.data) ? taskDaysRow.data : [];
+    const localDocs = loadLocal('docs', []);
+    const localTaskDays = loadLocal('taskDays', []);
+    const localIds = new Set(localDocs.map(d => d.id));
+    const onlyInSupa = docsArr.filter(d => !localIds.has(d.id));
+    let msg = `── DOCS ──\nSupabase: ${docsArr.length} docs, ${foldersArr.length} folders\nLocal cache: ${localDocs.length} docs`;
+    if (onlyInSupa.length > 0) msg += `\n\n⚠️ ${onlyInSupa.length} in Supabase NOT in local:\n${onlyInSupa.map(d=>'• '+d.title).join('\n')}`;
+    msg += `\n\nAll Supabase docs:\n${docsArr.map(d=>'• '+d.title).join('\n') || '(none)'}`;
+    msg += `\n\n── TASKS ──\nSupabase: ${supaTaskDays.length} days\nLocal: ${localTaskDays.length} days`;
+    if (el) el.textContent = msg;
+    // If Supabase has docs not in local, offer recovery
+    if (onlyInSupa.length > 0 || docsArr.length > localDocs.length || supaTaskDays.length > localTaskDays.length) {
+      const btn = document.getElementById('cc-supa-recover-btn');
+      if (btn) {
+        btn.style.display = 'block';
+        btn._supaDocsData = docsData;
+        btn._supaTasksData = tasksData;
+      }
+    }
+  } catch(e) {
+    const msg = 'Supabase check failed: ' + e.message;
+    if (el) el.textContent = msg;
+  }
+}
+
+function recoverFromSupabase() {
+  const btn = document.getElementById('cc-supa-recover-btn');
+  const docsData = btn?._supaDocsData;
+  const tasksData = btn?._supaTasksData;
+  if (!docsData && !tasksData) return;
+  // Recover docs
+  if (docsData) {
+    docsData.forEach(row => {
+      const supaVal = row.data;
+      const localVal = loadLocal(row.id, null);
+      if (row.id === 'docs' && Array.isArray(supaVal)) {
+        const merged = {};
+        (Array.isArray(localVal) ? localVal : []).forEach(d => { if (d && d.id) merged[d.id] = d; });
+        supaVal.forEach(d => {
+          if (!d || !d.id) return;
+          const loc = merged[d.id];
+          if (!loc || (d.updatedTs || 0) >= (loc.updatedTs || 0)) merged[d.id] = d;
+        });
+        saveLocal('docs', Object.values(merged));
+      } else if (supaVal !== null && supaVal !== undefined) {
+        saveLocal(row.id, supaVal);
+      }
+    });
+  }
+  // Recover tasks
+  if (tasksData) {
+    tasksData.forEach(row => {
+      const supaVal = row.data;
+      const localVal = loadLocal(row.date, null);
+      if (row.date === 'taskDays' && Array.isArray(supaVal)) {
+        const merged = {};
+        (Array.isArray(localVal) ? localVal : []).forEach(d => { if (d && d.date) merged[d.date] = d; });
+        supaVal.forEach(d => {
+          if (!d || !d.date) return;
+          const loc = merged[d.date];
+          if (!loc || (d.tasks?.length || 0) >= (loc.tasks?.length || 0)) merged[d.date] = d;
+        });
+        saveLocal('taskDays', Object.values(merged).sort((a,b) => a.date < b.date ? 1 : -1));
+      } else if (supaVal !== null && supaVal !== undefined) {
+        saveLocal(row.date, supaVal);
+      }
+    });
+  }
+  alert('Recovery complete! Refreshing page…');
+  location.reload();
 }
 
 // ---- LOGIN SPRITE ANIMATION ----
