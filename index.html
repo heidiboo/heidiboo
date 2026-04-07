@@ -9933,7 +9933,8 @@ function renderFinances() {
         ${sec.links.map(lk => {
           const favicon = finFavicon(lk.url);
           const imgTag = favicon ? `<img class="fin-link-favicon" src="${escHtml(favicon)}" alt="" onerror="this.style.display='none'">` : '';
-          return `<a href="${escHtml(lk.url)}" target="_blank" rel="noopener" class="fin-link-chip" onclick="event.stopPropagation()">
+          return `<a href="${escHtml(lk.url)}" target="_blank" rel="noopener" class="fin-link-chip" onclick="event.stopPropagation()"
+            oncontextmenu="event.preventDefault();event.stopPropagation();openFinLinkModal('${sec.id}','${lk.id}')">
             ${imgTag}${escHtml(lk.label)}
             <button class="fin-link-del" onclick="event.preventDefault();event.stopPropagation();deleteFinanceLink('${sec.id}','${lk.id}')" title="Remove">×</button>
           </a>`;
