@@ -5720,6 +5720,45 @@ function setupEditor() {
         }
         return;
       }
+
+      // Find the top-level block inside the editor
+      let block = node.nodeType === 3 ? node.parentElement : node;
+      while (block && block.parentElement !== editor) block = block.parentElement;
+
+      if (block && block !== editor) {
+        if (e.key === 'Backspace') {
+          // If cursor is at the very start of the block, and previous sibling is an image → delete image
+          const isAtBlockStart = range.startOffset === 0 &&
+            (node === block || node === block.firstChild ||
+             (node.nodeType === 3 && !node.previousSibling && node === block.firstChild));
+          if (isAtBlockStart) {
+            const prev = block.previousElementSibling;
+            if (prev && prev.classList.contains('doc-img-wrap')) {
+              e.preventDefault();
+              prev.remove();
+              triggerSave();
+              return;
+            }
+          }
+        }
+
+        if (e.key === 'Delete') {
+          // If cursor is at the very end of the block, and next sibling is an image → delete image
+          const textLen = node.nodeType === 3 ? node.textContent.length : node.childNodes.length;
+          const isAtBlockEnd = range.startOffset === textLen &&
+            (node === block || node === block.lastChild ||
+             (node.nodeType === 3 && !node.nextSibling));
+          if (isAtBlockEnd) {
+            const next = block.nextElementSibling;
+            if (next && next.classList.contains('doc-img-wrap')) {
+              e.preventDefault();
+              next.remove();
+              triggerSave();
+              return;
+            }
+          }
+        }
+      }
     }
 
     if (e.key === 'Tab') {
