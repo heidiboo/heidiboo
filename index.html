@@ -9763,20 +9763,41 @@ function toggleAmPm(day){
 }
 // ── UNDO STACK ──────────────────────────────────────────────────────────────
 const _schedUndoStack = [];
+const _schedRedoStack = [];
 function pushScheduleUndo(day) {
   const d = scheduleData[day];
   if (!d) return;
   _schedUndoStack.push({ day, blocks: JSON.parse(JSON.stringify(d.blocks)) });
   if (_schedUndoStack.length > 30) _schedUndoStack.shift();
+  _schedRedoStack.length = 0; // any new action clears redo history
 }
 document.addEventListener('keydown', e => {
-  if (!(e.metaKey || e.ctrlKey) || e.key !== 'z' || e.shiftKey) return;
-  // Let browser handle undo inside text fields / contenteditable
+  if (!(e.metaKey || e.ctrlKey) || e.key !== 'z') return;
   const active = document.activeElement;
   if (active && (active.isContentEditable || ['INPUT','TEXTAREA','SELECT'].includes(active.tagName))) return;
+
+  // Cmd+Shift+Z — redo
+  if (e.shiftKey) {
+    if (!_schedRedoStack.length) return;
+    e.preventDefault();
+    const { day, blocks } = _schedRedoStack.pop();
+    // Save current state to undo stack before redoing
+    const d = scheduleData[day];
+    if (d) _schedUndoStack.push({ day, blocks: JSON.parse(JSON.stringify(d.blocks)) });
+    scheduleData[day].blocks = blocks;
+    saveSchedule(); saveCurrentWeek();
+    renderSchedule(); renderFocusSchedule(); renderDailyScheduleView();
+    return;
+  }
+
+  // Cmd+Z — undo
   if (!_schedUndoStack.length) return;
   e.preventDefault();
   const { day, blocks } = _schedUndoStack.pop();
+  // Save current state to redo stack before undoing
+  const d = scheduleData[day];
+  if (d) _schedRedoStack.push({ day, blocks: JSON.parse(JSON.stringify(d.blocks)) });
+  if (_schedRedoStack.length > 30) _schedRedoStack.shift();
   scheduleData[day].blocks = blocks;
   saveSchedule(); saveCurrentWeek();
   renderSchedule(); renderFocusSchedule(); renderDailyScheduleView();
