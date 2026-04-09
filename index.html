@@ -856,6 +856,25 @@
   .doc-img-caption { text-align:center; font-style:italic; font-size:12px; color:var(--ink2); margin:-4px 0 12px; outline:none; }
   .doc-img-caption:empty:before { content:'Caption...'; color:rgba(0,0,0,0.25); pointer-events:none; font-style:italic; }
   .doc-img-caption:focus:empty:before { content:''; }
+  /* ── Inline doc link chip ── */
+  .doc-inline-link {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 10px 3px 7px; border-radius: 6px;
+    background: rgba(0,0,0,0.04); border: 1px solid var(--border);
+    font-size: 13px; cursor: pointer; color: var(--ink);
+    text-decoration: none; vertical-align: middle;
+    transition: background 0.12s;
+    font-family: var(--sans);
+  }
+  .doc-inline-link:hover { background: rgba(0,0,0,0.09); }
+  .doc-inline-link .dil-icon { font-size: 12px; opacity: 0.6; }
+  /* ── Doc linker picker ── */
+  #doc-linker-modal { position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:9500;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(3px); }
+  #doc-linker-box { background:#F9F7F3;border-radius:12px;padding:20px;width:400px;max-width:92vw;box-shadow:0 8px 40px rgba(0,0,0,0.15);display:flex;flex-direction:column;gap:10px; }
+  #doc-linker-search { padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;width:100%;outline:none;background:#fff; }
+  #doc-linker-list { max-height:240px;overflow-y:auto;display:flex;flex-direction:column;gap:3px; }
+  .doc-linker-item { padding:8px 12px;border-radius:7px;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:8px; }
+  .doc-linker-item:hover { background:rgba(0,0,0,0.05); }
   .doc-drag-handle {
     position:absolute; left:-22px; top:50%; transform:translateY(-50%);
     width:16px; height:24px; display:flex; align-items:center; justify-content:center;
@@ -2481,14 +2500,21 @@ const _supaQueue = {};
 let _supaFlushTimer = null;
 function syncToSupabase(key, val) {
   const m = SUPA_MAP[key];
-  if (!m) return;
-  _supaQueue[key] = val; // overwrite with latest value
+  // Allow individual doc rows (doc_xxxxx) even though they're not in the static map
+  const isIndivDoc = !m && typeof key === 'string' && key.startsWith('doc_') && key.length > 10;
+  if (!m && !isIndivDoc) return;
+  _supaQueue[key] = val;
   if (_supaFlushTimer) return;
   _supaFlushTimer = setTimeout(async () => {
     _supaFlushTimer = null;
     const entries = Object.entries(_supaQueue);
     for (const k in _supaQueue) delete _supaQueue[k];
     for (const [k, v] of entries) {
+      // Individual doc row — stored as { id: docId, data: docObject } in docs table
+      if (k.startsWith('doc_') && k.length > 10 && !SUPA_MAP[k]) {
+        try { await sb.from('docs').upsert({ id: k, data: v }, { onConflict: 'id' }); } catch(e) { console.warn('Supabase doc sync error:', k, e.message); }
+        continue;
+      }
       const mp = SUPA_MAP[k]; if (!mp) continue;
       try {
         await sb.from(mp.table).upsert(
@@ -2501,7 +2527,7 @@ function syncToSupabase(key, val) {
         );
       } catch(e) { console.warn('Supabase sync error:', k, e.message); }
     }
-  }, 8000); // flush every 8 seconds max (was 30s — shorter window = less data loss risk)
+  }, 5000);
 }
 
 // ── Emergency flush on page close/refresh ─────────────────────────────────
@@ -2516,15 +2542,25 @@ window.addEventListener('beforeunload', () => {
   for (const k in _supaQueue) delete _supaQueue[k];
   const token = _supaAccessToken || SUPA_KEY;
   entries.forEach(([k, v]) => {
-    const mp = SUPA_MAP[k]; if (!mp) return;
-    let row, onConflict;
-    if      (mp.table === 'tasks')    { row = { id: mp.id, date: k, data: v }; onConflict = 'id'; }
-    else if (mp.table === 'docs')     { row = { id: mp.id, data: v };           onConflict = 'id'; }
-    else if (mp.table === 'projects') { row = { id: mp.id, data: v };           onConflict = 'id'; }
-    else if (mp.table === 'schedule') { row = { week_key: mp.id, data: v };     onConflict = 'week_key'; }
-    else                              { row = { key: mp.id, value: v };         onConflict = 'key'; }
+    let table, row, onConflict;
+    // Individual doc row (small — always fits in keepalive 64KB limit)
+    if (k.startsWith('doc_') && k.length > 10 && !SUPA_MAP[k]) {
+      table = 'docs'; row = { id: k, data: v }; onConflict = 'id';
+    } else {
+      const mp = SUPA_MAP[k]; if (!mp) return;
+      table = mp.table;
+      if      (mp.table === 'tasks')    { row = { id: mp.id, date: k, data: v }; onConflict = 'id'; }
+      else if (mp.table === 'docs')     { row = { id: mp.id, data: v };           onConflict = 'id'; }
+      else if (mp.table === 'projects') { row = { id: mp.id, data: v };           onConflict = 'id'; }
+      else if (mp.table === 'schedule') { row = { week_key: mp.id, data: v };     onConflict = 'week_key'; }
+      else                              { row = { key: mp.id, value: v };         onConflict = 'key'; }
+    }
+    // Skip large bulk-docs flush on unload — individual doc rows handle it reliably
+    if (k === 'docs') return;
+    const body = JSON.stringify(row);
+    if (body.length > 60000) return; // keepalive limit ~64KB — skip oversized entries
     try {
-      fetch(`${SUPA_URL}/rest/v1/${mp.table}?on_conflict=${onConflict}`, {
+      fetch(`${SUPA_URL}/rest/v1/${table}?on_conflict=${onConflict}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -2532,8 +2568,8 @@ window.addEventListener('beforeunload', () => {
           'Authorization': 'Bearer ' + token,
           'Prefer': 'return=minimal,resolution=merge-duplicates'
         },
-        body: JSON.stringify(row),
-        keepalive: true  // continues after page unloads
+        body,
+        keepalive: true
       });
     } catch(e) { /* best-effort */ }
   });
@@ -2579,55 +2615,64 @@ async function loadFromSupabase() {
       saveLocal(row.date, supaVal);
     });
   }
-  // docs — smart merge so Supabase can't wipe local data that hasn't synced yet
+  // docs — three-way merge: local cache + old bulk Supabase row + new individual doc rows
   if (docsRes.data) {
+    const bulkMap   = {}; // docs from the legacy { id:'docs', data:[...] } row
+    const indivMap  = {}; // docs from individual { id:'doc_xxx', data:{...} } rows (the new reliable format)
+    const folderRows = {};
+
     docsRes.data.forEach(row => {
-      const supaVal = row.data;
-      const localVal = loadLocal(row.id, null);
-      // For the main docs array: always merge so neither local nor Supabase data is lost
-      if (row.id === 'docs') {
-        const supaArr = Array.isArray(supaVal) ? supaVal : [];
-        const localArr = Array.isArray(localVal) ? localVal : [];
-        if (supaArr.length === 0 && localArr.length > 0) {
-          // Supabase empty, local has data — keep local and re-push up
-          console.warn('[sync] Supabase docs empty, local has', localArr.length, '— re-pushing to Supabase');
-          syncToSupabase('docs', localArr);
-          return;
-        }
-        if (supaArr.length > 0) {
-          // Merge: union by doc id, newer updatedTs wins (Supabase wins ties)
-          const merged = {};
-          localArr.forEach(d => { if (d?.id) merged[d.id] = d; });
-          supaArr.forEach(d => {
-            if (!d?.id) return;
-            const loc = merged[d.id];
-            if (!loc || (d.updatedTs || 0) >= (loc.updatedTs || 0)) merged[d.id] = d;
-          });
-          const mergedArr = Object.values(merged);
-          saveLocal('docs', mergedArr);
-          // If merge found local-only docs, push them back up to Supabase
-          if (mergedArr.length > supaArr.length) syncToSupabase('docs', mergedArr);
-          return;
-        }
-        // Both empty — nothing to do
-        return;
+      if (row.id === 'docs' && Array.isArray(row.data)) {
+        row.data.forEach(d => { if (d?.id) bulkMap[d.id] = d; });
+      } else if (row.id?.startsWith('doc_') && row.id.length > 10 && row.data?.id) {
+        indivMap[row.data.id] = row.data; // individual rows are most authoritative
+      } else if (['docFolders','trashedDocs','trashedFolders','lockedDocs'].includes(row.id)) {
+        folderRows[row.id] = row.data;
+      } else if (row.data != null && !['docFolders','trashedDocs','trashedFolders','lockedDocs'].includes(row.id)) {
+        saveLocal(row.id, row.data); // any other doc-table row
       }
-      // For folders: union merge so no folder is lost
-      if (['docFolders','trashedDocs','trashedFolders'].includes(row.id)) {
-        const supaArr = Array.isArray(supaVal) ? supaVal : [];
-        const localArr = Array.isArray(localVal) ? localVal : [];
-        if (supaArr.length === 0 && localArr.length > 0) { syncToSupabase(row.id, localArr); return; }
-        if (supaArr.length > 0 && localArr.length > 0) {
-          const merged = {};
-          localArr.forEach(f => { if (f?.id) merged[f.id] = f; });
-          supaArr.forEach(f => { if (f?.id) merged[f.id] = f; });
-          saveLocal(row.id, Object.values(merged));
-          return;
-        }
-        if (supaArr.length > 0) { saveLocal(row.id, supaArr); return; }
-        return;
+    });
+
+    const localArr = Array.isArray(loadLocal('docs', [])) ? loadLocal('docs', []) : [];
+    // Merge order: local ← bulk ← individual (individual rows win, they're per-doc reliable syncs)
+    const merged = {};
+    localArr.forEach(d => { if (d?.id) merged[d.id] = d; });
+    Object.values(bulkMap).forEach(d => {
+      if (!merged[d.id] || (d.updatedTs || 0) > (merged[d.id].updatedTs || 0)) merged[d.id] = d;
+    });
+    Object.values(indivMap).forEach(d => {
+      // Individual row wins over bulk and local on tie (it's the most recent dedicated sync)
+      if (!merged[d.id] || (d.updatedTs || 0) >= (merged[d.id].updatedTs || 0)) merged[d.id] = d;
+    });
+
+    const finalDocs = Object.values(merged);
+    if (finalDocs.length > 0) {
+      saveLocal('docs', finalDocs);
+      const supaTotal = Object.keys(bulkMap).length + Object.keys(indivMap).length;
+      if (finalDocs.length > Object.keys(bulkMap).length) {
+        // Local has docs Supabase bulk doesn't — push full array back up as backup
+        syncToSupabase('docs', finalDocs);
       }
-      if (supaVal != null) saveLocal(row.id, supaVal);
+    } else if (localArr.length > 0) {
+      // Supabase completely empty but local has docs — keep local and push back up
+      console.warn('[sync] No docs in Supabase, local has', localArr.length, '— re-pushing');
+      syncToSupabase('docs', localArr);
+      // Also push as individual rows for reliability
+      localArr.forEach(d => { if (d?.id) syncToSupabase(d.id, d); });
+    }
+
+    // Folders: union merge
+    ['docFolders','trashedDocs','trashedFolders','lockedDocs'].forEach(key => {
+      const supaVal = folderRows[key];
+      const localVal = loadLocal(key, null);
+      const supaArr = Array.isArray(supaVal) ? supaVal : [];
+      const localArr2 = Array.isArray(localVal) ? localVal : [];
+      if (supaArr.length === 0 && localArr2.length > 0) { syncToSupabase(key, localArr2); return; }
+      if (supaArr.length > 0 && localArr2.length > 0) {
+        const fm = {}; localArr2.forEach(f => { if (f?.id) fm[f.id] = f; }); supaArr.forEach(f => { if (f?.id) fm[f.id] = f; });
+        saveLocal(key, Object.values(fm)); return;
+      }
+      if (supaArr.length > 0) saveLocal(key, supaArr);
     });
   }
   // projects
@@ -5204,7 +5249,9 @@ function autoSaveDoc() {
       ? existingBody
       : body;
     docs[idx] = { ...docs[idx], title, body: safeBody, project, updatedAt: now, updatedTs: Date.now() };
-    save('docs', docs);
+    saveLocal('docs', docs);  // write full array to localStorage immediately
+    syncToSupabase(currentDocId, docs[idx]); // sync this one doc as its own Supabase row (small, always fits keepalive)
+    syncToSupabase('docs', docs);            // also sync the bulk array as a backup
     renderDocs();
     // Flash "Saved" indicator
     const ind = document.getElementById('doc-autosave-indicator');
@@ -5528,6 +5575,8 @@ const SLASH_COMMANDS = [
   { group: 'Text',    icon:'▸', label:'Toggle',         desc:'Collapsible block',      cmd:'toggle' },
   { group: 'AI',      icon:'✦', label:'Action Items',   desc:'Extract tasks from doc with AI', cmd:'ai-action-items' },
   { group: 'AI',      icon:'✦', label:'Summarise',      desc:'Generate a summary of this doc', cmd:'ai-summary' },
+  { group: 'Docs',    icon:'📄', label:'Link Doc',       desc:'Embed a link to another doc',    cmd:'doc-link' },
+  { group: 'Docs',    icon:'📝', label:'New Sub-doc',    desc:'Create a new doc linked here',   cmd:'doc-new' },
 ];
 
 let slashRange = null;
@@ -6159,6 +6208,62 @@ function hideSlashMenu() {
   slashQuery = '';
 }
 
+function openDocLinkerPicker(createNew) {
+  // If createNew, skip the picker and directly create + link a new doc
+  if (createNew) {
+    const newId = 'doc_' + Date.now();
+    const now = new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+    const newDoc = { id: newId, title: 'Untitled', body: '', folder: '', updatedAt: now, createdAt: now, updatedTs: Date.now(), tags: [], cover: '' };
+    docs.push(newDoc);
+    save('docs', docs);
+    renderDocs();
+    insertDocLinkChip(newId, 'Untitled');
+    return;
+  }
+
+  // Show picker
+  let modal = document.getElementById('doc-linker-modal');
+  if (modal) modal.remove();
+  modal = document.createElement('div');
+  modal.id = 'doc-linker-modal';
+  const otherDocs = docs.filter(d => d.id !== currentDocId);
+  const listHTML = otherDocs.map(d =>
+    `<div class="doc-linker-item" onclick="insertDocLinkChip('${d.id}',${JSON.stringify(d.title||'Untitled')});document.getElementById('doc-linker-modal').remove()">
+      <span style="opacity:0.5;font-size:12px">📄</span>
+      <span>${escHtml(d.title||'Untitled')}</span>
+    </div>`
+  ).join('') || '<div style="padding:12px;color:var(--ink2);font-size:12px;text-align:center">No other docs yet</div>';
+
+  modal.innerHTML = `<div id="doc-linker-box">
+    <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink2);margin-bottom:2px">Link a doc</div>
+    <input id="doc-linker-search" placeholder="Search docs…" oninput="filterDocLinker(this.value)" autocomplete="off">
+    <div id="doc-linker-list">${listHTML}</div>
+  </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  setTimeout(() => document.getElementById('doc-linker-search')?.focus(), 50);
+}
+
+function filterDocLinker(query) {
+  const q = query.toLowerCase();
+  const otherDocs = docs.filter(d => d.id !== currentDocId && (d.title||'').toLowerCase().includes(q));
+  const list = document.getElementById('doc-linker-list');
+  if (!list) return;
+  list.innerHTML = otherDocs.map(d =>
+    `<div class="doc-linker-item" onclick="insertDocLinkChip('${d.id}',${JSON.stringify(d.title||'Untitled')});document.getElementById('doc-linker-modal').remove()">
+      <span style="opacity:0.5;font-size:12px">📄</span>
+      <span>${escHtml(d.title||'Untitled')}</span>
+    </div>`
+  ).join('') || '<div style="padding:12px;color:var(--ink2);font-size:12px;text-align:center">No matches</div>';
+}
+
+function insertDocLinkChip(docId, title) {
+  const safeTitle = (title || 'Untitled').replace(/"/g, '&quot;');
+  const html = `<span class="doc-inline-link" contenteditable="false" data-doc-id="${docId}" onclick="openDoc('${docId}')"><span class="dil-icon">📄</span>${safeTitle}</span>&nbsp;`;
+  document.execCommand('insertHTML', false, html);
+  autoSaveDoc();
+}
+
 function execSlash(cmd) {
   hideSlashMenu();
   // Remove the /query text
@@ -6177,10 +6282,9 @@ function execSlash(cmd) {
       sel.addRange(delRange);
     }
   }
-  if (cmd === 'ai-action-items' || cmd === 'ai-summary') {
-    runDocAI(cmd);
-    return;
-  }
+  if (cmd === 'ai-action-items' || cmd === 'ai-summary') { runDocAI(cmd); return; }
+  if (cmd === 'doc-link') { openDocLinkerPicker(false); return; }
+  if (cmd === 'doc-new')  { openDocLinkerPicker(true);  return; }
   insertBlock(cmd);
 }
 
