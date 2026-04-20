@@ -2469,6 +2469,28 @@ function save(key, val) {
       return;
     }
   }
+
+  // For taskDays: stamp today's card with a timestamp and sync it as its own small row.
+  // This is the reliable path — the bulk 'taskDays' row can be too large for keepalive.
+  if (key === 'taskDays' && Array.isArray(val)) {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayCard = val.find(d => d.date === todayStr);
+    if (todayCard) {
+      todayCard._updatedTs = Date.now();
+      syncToSupabase('taskday_' + todayStr, todayCard);
+    }
+    // Also stamp yesterday in case of late-night saves
+    const yd = new Date(); yd.setDate(yd.getDate() - 1);
+    const ydStr = yd.toISOString().slice(0, 10);
+    const ydCard = val.find(d => d.date === ydStr);
+    if (ydCard) { ydCard._updatedTs = ydCard._updatedTs || Date.now(); syncToSupabase('taskday_' + ydStr, ydCard); }
+  }
+
+  // For projects: sync each project as its own small row (action logs are the critical data)
+  if (key === 'projects' && Array.isArray(val)) {
+    val.forEach(p => { if (p?.id) { p._updatedTs = p._updatedTs || Date.now(); syncToSupabase('proj_' + p.id, p); } });
+  }
+
   saveLocal(key, val);
   syncToSupabase(key, val);
 }
@@ -2500,9 +2522,11 @@ const _supaQueue = {};
 let _supaFlushTimer = null;
 function syncToSupabase(key, val) {
   const m = SUPA_MAP[key];
-  // Allow individual doc rows (doc_xxxxx) even though they're not in the static map
-  const isIndivDoc = !m && typeof key === 'string' && key.startsWith('doc_') && key.length > 10;
-  if (!m && !isIndivDoc) return;
+  // Allow individual rows not in static map: doc_xxx (docs), taskday_YYYY-MM-DD (tasks), proj_xxx (projects)
+  const isIndivDoc     = !m && typeof key === 'string' && key.startsWith('doc_') && key.length > 10;
+  const isIndivTaskDay = !m && typeof key === 'string' && key.startsWith('taskday_');
+  const isIndivProj    = !m && typeof key === 'string' && key.startsWith('proj_');
+  if (!m && !isIndivDoc && !isIndivTaskDay && !isIndivProj) return;
   _supaQueue[key] = val;
   if (_supaFlushTimer) return;
   _supaFlushTimer = setTimeout(async () => {
@@ -2510,9 +2534,19 @@ function syncToSupabase(key, val) {
     const entries = Object.entries(_supaQueue);
     for (const k in _supaQueue) delete _supaQueue[k];
     for (const [k, v] of entries) {
-      // Individual doc row — stored as { id: docId, data: docObject } in docs table
+      // Individual doc row
       if (k.startsWith('doc_') && k.length > 10 && !SUPA_MAP[k]) {
         try { await sb.from('docs').upsert({ id: k, data: v }, { onConflict: 'id' }); } catch(e) { console.warn('Supabase doc sync error:', k, e.message); }
+        continue;
+      }
+      // Individual task-day row — stored as { id, date, data } in tasks table
+      if (k.startsWith('taskday_') && !SUPA_MAP[k]) {
+        try { await sb.from('tasks').upsert({ id: k, date: k, data: v }, { onConflict: 'id' }); } catch(e) { console.warn('Supabase taskday sync error:', k, e.message); }
+        continue;
+      }
+      // Individual project row — stored as { id, data } in projects table
+      if (k.startsWith('proj_') && !SUPA_MAP[k]) {
+        try { await sb.from('projects').upsert({ id: k, data: v }, { onConflict: 'id' }); } catch(e) { console.warn('Supabase proj sync error:', k, e.message); }
         continue;
       }
       const mp = SUPA_MAP[k]; if (!mp) continue;
@@ -2543,9 +2577,13 @@ window.addEventListener('beforeunload', () => {
   const token = _supaAccessToken || SUPA_KEY;
   entries.forEach(([k, v]) => {
     let table, row, onConflict;
-    // Individual doc row (small — always fits in keepalive 64KB limit)
+    // Individual rows (small — fit in keepalive 64KB limit)
     if (k.startsWith('doc_') && k.length > 10 && !SUPA_MAP[k]) {
       table = 'docs'; row = { id: k, data: v }; onConflict = 'id';
+    } else if (k.startsWith('taskday_') && !SUPA_MAP[k]) {
+      table = 'tasks'; row = { id: k, date: k, data: v }; onConflict = 'id';
+    } else if (k.startsWith('proj_') && !SUPA_MAP[k]) {
+      table = 'projects'; row = { id: k, data: v }; onConflict = 'id';
     } else {
       const mp = SUPA_MAP[k]; if (!mp) return;
       table = mp.table;
@@ -2585,35 +2623,43 @@ async function loadFromSupabase() {
     sb.from('settings').select('*'),
   ]);
 
-  // tasks — protect local data from empty Supabase rows
+  // tasks — three-way merge: local + bulk taskDays row + individual taskday_YYYY-MM-DD rows
   if (tasksRes.data) {
+    const bulkTaskMap  = {}; // days from the legacy { date:'taskDays', data:[...] } row
+    const indivTaskMap = {}; // days from individual { date:'taskday_2026-04-20', data:{...} } rows
+
     tasksRes.data.forEach(row => {
-      const supaVal = row.data;
-      const localVal = loadLocal(row.date, null);
-      // Don't overwrite non-empty local taskDays with an empty Supabase value
-      if (row.date === 'taskDays' && Array.isArray(supaVal) && supaVal.length === 0 &&
-          Array.isArray(localVal) && localVal.length > 0) {
-        console.warn('[sync] Supabase taskDays is empty but local has', localVal.length, 'days — keeping local');
-        syncToSupabase('taskDays', localVal);
-        return;
+      if (row.date === 'taskDays' && Array.isArray(row.data)) {
+        row.data.forEach(d => { if (d?.date) bulkTaskMap[d.date] = d; });
+      } else if (row.date?.startsWith('taskday_') && row.data?.date) {
+        indivTaskMap[row.data.date] = row.data; // individual rows win — they're per-day reliable syncs
       }
-      // Merge taskDays by date key (union, prefer whichever has more tasks)
-      if (row.date === 'taskDays' && Array.isArray(supaVal) && Array.isArray(localVal) && localVal.length > 0) {
-        const merged = {};
-        localVal.forEach(d => { if (d && d.date) merged[d.date] = d; });
-        supaVal.forEach(d => {
-          if (!d || !d.date) return;
-          const loc = merged[d.date];
-          // Keep whichever has more tasks (Supabase wins ties)
-          if (!loc || (d.tasks?.length || 0) >= (loc.tasks?.length || 0)) merged[d.date] = d;
-        });
-        const mergedArr = Object.values(merged).sort((a,b) => a.date < b.date ? 1 : -1);
-        saveLocal('taskDays', mergedArr);
-        if (mergedArr.length > supaVal.length) syncToSupabase('taskDays', mergedArr);
-        return;
-      }
-      saveLocal(row.date, supaVal);
     });
+
+    const localArr = Array.isArray(loadLocal('taskDays', [])) ? loadLocal('taskDays', []) : [];
+    // Merge order: local ← bulk ← individual (individual rows are most authoritative)
+    // Key rule: use _updatedTs to determine winner, NOT task count
+    const merged = {};
+    localArr.forEach(d => { if (d?.date) merged[d.date] = d; });
+    Object.values(bulkTaskMap).forEach(d => {
+      const loc = merged[d.date];
+      if (!loc || (d._updatedTs || 0) > (loc._updatedTs || 0)) merged[d.date] = d;
+    });
+    Object.values(indivTaskMap).forEach(d => {
+      const loc = merged[d.date];
+      // Individual row wins on tie — it's the dedicated per-day sync
+      if (!loc || (d._updatedTs || 0) >= (loc._updatedTs || 0)) merged[d.date] = d;
+    });
+
+    const finalDays = Object.values(merged).sort((a, b) => a.date < b.date ? 1 : -1);
+    if (finalDays.length > 0) {
+      saveLocal('taskDays', finalDays);
+      if (finalDays.length > Object.keys(bulkTaskMap).length) syncToSupabase('taskDays', finalDays);
+    } else if (localArr.length > 0) {
+      console.warn('[sync] No tasks in Supabase, re-pushing local');
+      syncToSupabase('taskDays', localArr);
+      localArr.forEach(d => { if (d?.date) syncToSupabase('taskday_' + d.date, d); });
+    }
   }
   // docs — three-way merge: local cache + old bulk Supabase row + new individual doc rows
   if (docsRes.data) {
@@ -2675,9 +2721,41 @@ async function loadFromSupabase() {
       if (supaArr.length > 0) saveLocal(key, supaArr);
     });
   }
-  // projects
+  // projects — three-way merge: local + bulk row + individual proj_xxx rows
   if (projRes.data) {
-    projRes.data.forEach(row => saveLocal(row.id, row.data));
+    const bulkProjMap  = {}; // from { id:'projects', data:[...] }
+    const indivProjMap = {}; // from { id:'proj_xxx', data:{...} } rows
+
+    projRes.data.forEach(row => {
+      if (row.id === 'projects' && Array.isArray(row.data)) {
+        row.data.forEach(p => { if (p?.id) bulkProjMap[p.id] = p; });
+      } else if (row.id?.startsWith('proj_') && row.data?.id) {
+        indivProjMap[row.data.id] = row.data;
+      }
+    });
+
+    const localProjs = Array.isArray(loadLocal('projects', [])) ? loadLocal('projects', []) : [];
+    const merged = {};
+    localProjs.forEach(p => { if (p?.id) merged[p.id] = p; });
+    Object.values(bulkProjMap).forEach(p => {
+      const loc = merged[p.id];
+      if (!loc || (p._updatedTs || 0) > (loc._updatedTs || 0)) merged[p.id] = p;
+    });
+    Object.values(indivProjMap).forEach(p => {
+      const loc = merged[p.id];
+      // Individual row wins on tie — it's the dedicated per-project sync
+      if (!loc || (p._updatedTs || 0) >= (loc._updatedTs || 0)) merged[p.id] = p;
+    });
+
+    const finalProjs = Object.values(merged);
+    if (finalProjs.length > 0) {
+      saveLocal('projects', finalProjs);
+      if (finalProjs.length > Object.keys(bulkProjMap).length) syncToSupabase('projects', finalProjs);
+    } else if (localProjs.length > 0) {
+      console.warn('[sync] No projects in Supabase, re-pushing local');
+      syncToSupabase('projects', localProjs);
+      localProjs.forEach(p => { if (p?.id) syncToSupabase('proj_' + p.id, p); });
+    }
   }
   // schedule
   if (schedRes.data) {
@@ -3976,6 +4054,7 @@ function toggleTodoById(id) {
   const t = day.tasks.find(t => t.id === id);
   if (t) t.done = !t.done;
   sortTasksInDay(day);
+  day._updatedTs = Date.now(); // stamp so this version wins on merge
   save('taskDays', taskDays);
   renderTodos();
   renderFocusTodos();
@@ -3986,6 +4065,7 @@ function toggleTodoById(id) {
 function deleteTodoById(id) {
   const day = getTodayCard();
   day.tasks = day.tasks.filter(t => t.id !== id);
+  day._updatedTs = Date.now(); // stamp so deletion survives a refresh
   save('taskDays', taskDays);
   renderTodos();
   renderFocusTodos();
@@ -4181,21 +4261,24 @@ function rolloverTasks() {
   if (!taskDays.find(d => d.date === today)) {
     taskDays.unshift({ date: today, tasks: [] });
   }
-  // Find tasks from previous days that are not done → roll into today
   const todayCard = taskDays.find(d => d.date === today);
+
+  // Collect all task IDs that exist in today (by id and by original text) to avoid re-rolling
+  const todayIds = new Set(todayCard.tasks.map(t => t.id));
+
   taskDays.forEach(day => {
     if (day.date === today) return;
     day.tasks.forEach(t => {
-      if (!t.done && t.text.trim()) { // only roll tasks that actually have text
-        // Only roll if not already in today
-        const alreadyRolled = todayCard.tasks.some(tt => tt.id === t.id);
-        if (!alreadyRolled) {
-          todayCard.tasks.unshift({ ...t, rolledFrom: t.rolledFrom || day.date });
-        }
-        t.rolledOver = true; // mark original as rolled
-      }
+      // Only roll: not done, has text, not already deleted (still exists in its day), not yet in today
+      if (t.done || !t.text?.trim() || t.rolledOver || todayIds.has(t.id)) return;
+      todayCard.tasks.unshift({ ...t, rolledFrom: t.rolledFrom || day.date });
+      todayIds.add(t.id);
+      t.rolledOver = true; // mark so it never rolls again
     });
   });
+
+  // Stamp today so merge logic knows this is current
+  todayCard._updatedTs = Date.now();
   save('taskDays', taskDays);
 }
 
@@ -4704,9 +4787,10 @@ function toggleDayTask(date, id) {
   if (task) task.done = !task.done;
   if (task && task.rolledFrom) {
     const srcDay = taskDays.find(d => d.date === task.rolledFrom);
-    if (srcDay) { const src = srcDay.tasks.find(t => t.id === id); if (src) src.done = task.done; }
+    if (srcDay) { const src = srcDay.tasks.find(t => t.id === id); if (src) src.done = task.done; srcDay._updatedTs = Date.now(); }
   }
   sortTasksInDay(day);
+  day._updatedTs = Date.now();
   save('taskDays', taskDays);
   renderTaskDays();
   renderTodos();
@@ -4718,6 +4802,7 @@ function deleteDayTask(date, id) {
   const day = taskDays.find(d => d.date === date);
   if (!day) return;
   day.tasks = day.tasks.filter(t => t.id !== id);
+  day._updatedTs = Date.now();
   save('taskDays', taskDays);
   renderTaskDays();
   renderTodos();
@@ -7903,6 +7988,7 @@ function addActionLog(pi) {
   const ts = now.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) + ' · ' +
     now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true});
   p.actionLog.push({ id: 'log_'+Date.now(), text, ts });
+  p._updatedTs = Date.now(); // stamp so this project wins on merge after refresh
   save('projects', projects);
   inp.value = '';
   renderProjectDetail(); // re-renders with input hidden
