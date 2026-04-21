@@ -2807,28 +2807,72 @@ async function drCheckSupabase() {
   const btn = document.getElementById('dr-recover-btn');
   if (res) { res.style.display = 'block'; res.textContent = 'Checking Supabase…'; }
   try {
-    const [{ data: docsData }, { data: tasksData }] = await Promise.all([
+    const [{ data: docsData }, { data: tasksData }, { data: projData }] = await Promise.all([
       sb.from('docs').select('*'),
-      sb.from('tasks').select('*')
+      sb.from('tasks').select('*'),
+      sb.from('projects').select('*')
     ]);
-    const docsRow = docsData?.find(r => r.id === 'docs');
-    const supaDocsArr = Array.isArray(docsRow?.data) ? docsRow.data : [];
-    const taskDaysRow = tasksData?.find(r => r.date === 'taskDays');
-    const supaTaskDays = Array.isArray(taskDaysRow?.data) ? taskDaysRow.data : [];
-    const localDocs = loadLocal('docs', []);
+
+    // ── docs ──
+    const bulkDocsRow  = docsData?.find(r => r.id === 'docs');
+    const supaDocsBulk = Array.isArray(bulkDocsRow?.data) ? bulkDocsRow.data : [];
+    const supaDocsIndiv = (docsData || []).filter(r => r.id?.startsWith('doc_') && r.data?.id).map(r => r.data);
+    const supaDocsAll  = Object.values({ ...Object.fromEntries(supaDocsBulk.map(d => [d.id, d])), ...Object.fromEntries(supaDocsIndiv.map(d => [d.id, d])) });
+    const localDocs    = loadLocal('docs', []);
+    const localDocIds  = new Set(localDocs.map(d => d.id));
+    const missingDocs  = supaDocsAll.filter(d => !localDocIds.has(d.id));
+
+    // ── tasks ──
+    const bulkTaskRow   = tasksData?.find(r => r.date === 'taskDays');
+    const supaTaskBulk  = Array.isArray(bulkTaskRow?.data) ? bulkTaskRow.data : [];
+    const supaTaskIndiv = (tasksData || []).filter(r => r.date?.startsWith('taskday_') && r.data?.date).map(r => r.data);
+    const supaTaskAll   = Object.values({ ...Object.fromEntries(supaTaskBulk.map(d => [d.date, d])), ...Object.fromEntries(supaTaskIndiv.map(d => [d.date, d])) });
     const localTaskDays = loadLocal('taskDays', []);
-    const localIds = new Set(localDocs.map(d => d.id));
-    const onlyInSupa = supaDocsArr.filter(d => !localIds.has(d.id));
-    let msg = `SUPABASE\n• ${supaDocsArr.length} docs\n• ${supaTaskDays.length} task days\n\nLOCAL (this browser)\n• ${localDocs.length} docs\n• ${localTaskDays.length} task days`;
-    if (onlyInSupa.length > 0) {
-      msg += `\n\n⚠️ ${onlyInSupa.length} docs in Supabase missing locally:\n${onlyInSupa.map(d => '• ' + (d.title || 'Untitled')).join('\n')}`;
-    }
-    msg += `\n\nAll Supabase docs:\n${supaDocsArr.map(d => '• ' + (d.title || 'Untitled')).join('\n') || '(none)'}`;
+
+    // ── projects ──
+    const bulkProjRow   = projData?.find(r => r.id === 'projects');
+    const supaProjBulk  = Array.isArray(bulkProjRow?.data) ? bulkProjRow.data : [];
+    const supaProjIndiv = (projData || []).filter(r => r.id?.startsWith('proj_') && r.data?.id).map(r => r.data);
+    const supaProjAll   = Object.values({ ...Object.fromEntries(supaProjBulk.map(p => [p.id, p])), ...Object.fromEntries(supaProjIndiv.map(p => [p.id, p])) });
+    const localProjs    = loadLocal('projects', []);
+    const localProjIds  = new Set(localProjs.map(p => p.id));
+    const missingProjs  = supaProjAll.filter(p => !localProjIds.has(p.id));
+
+    // ── action log comparison ──
+    const projLogLines = [];
+    supaProjAll.forEach(sp => {
+      const lp = localProjs.find(p => p.id === sp.id);
+      const supaLogCount  = sp.actionLog?.length  || 0;
+      const localLogCount = lp?.actionLog?.length || 0;
+      if (supaLogCount !== localLogCount || !lp) {
+        projLogLines.push(`  • ${sp.name || sp.id}: Supabase=${supaLogCount} entries, Local=${localLogCount} entries${supaLogCount > localLogCount ? ' ⚠️' : ''}`);
+      }
+    });
+
+    let msg = `── SUPABASE ──\n• ${supaDocsAll.length} docs\n• ${supaTaskAll.length} task days\n• ${supaProjAll.length} projects`;
+    msg += `\n\n── LOCAL (this browser) ──\n• ${localDocs.length} docs\n• ${localTaskDays.length} task days\n• ${localProjs.length} projects`;
+    if (missingDocs.length)  msg += `\n\n⚠️ Docs in Supabase missing locally:\n${missingDocs.map(d=>'  • '+(d.title||'Untitled')).join('\n')}`;
+    if (missingProjs.length) msg += `\n\n⚠️ Projects in Supabase missing locally:\n${missingProjs.map(p=>'  • '+(p.name||p.id)).join('\n')}`;
+    if (projLogLines.length) msg += `\n\n⚠️ Action log count mismatch:\n${projLogLines.join('\n')}`;
+
+    // List all projects + log entry counts from Supabase
+    msg += `\n\n── Supabase projects & action logs ──\n`;
+    if (supaProjAll.length) {
+      supaProjAll.forEach(p => {
+        const logs = p.actionLog || [];
+        msg += `• ${p.name || p.id} (${logs.length} log entries)\n`;
+        logs.slice(-3).forEach(e => { msg += `    ${e.ts}: ${(e.text||'').replace(/<[^>]+>/g,'').slice(0,60)}\n`; });
+      });
+    } else { msg += '(none)\n'; }
+
     if (res) res.textContent = msg;
-    if (btn && (onlyInSupa.length > 0 || supaDocsArr.length > localDocs.length || supaTaskDays.length > localTaskDays.length)) {
+
+    const needsRecover = missingDocs.length || missingProjs.length || projLogLines.some(l => l.includes('⚠️'));
+    if (btn && needsRecover) {
       btn.style.display = 'block';
-      btn._docsData = docsData;
+      btn._docsData  = docsData;
       btn._tasksData = tasksData;
+      btn._projData  = projData;
     }
   } catch(e) {
     if (res) res.textContent = 'Error: ' + e.message;
@@ -2837,8 +2881,9 @@ async function drCheckSupabase() {
 
 function drRecoverFromSupabase() {
   const btn = document.getElementById('dr-recover-btn');
-  const docsData = btn?._docsData;
+  const docsData  = btn?._docsData;
   const tasksData = btn?._tasksData;
+  const projData  = btn?._projData;
   let mergedDocs = null;
 
   if (docsData) {
@@ -2875,20 +2920,50 @@ function drRecoverFromSupabase() {
     });
   }
 
+  // ── recover projects ──
+  if (projData) {
+    const supaProjBulk  = projData.find(r => r.id === 'projects')?.data || [];
+    const supaProjIndiv = projData.filter(r => r.id?.startsWith('proj_') && r.data?.id).map(r => r.data);
+    const supaAll = Object.values({ ...Object.fromEntries(supaProjBulk.map(p=>[p.id,p])), ...Object.fromEntries(supaProjIndiv.map(p=>[p.id,p])) });
+    const localProjs = loadLocal('projects', []);
+    const merged = {};
+    localProjs.forEach(p => { if (p?.id) merged[p.id] = p; });
+    supaAll.forEach(p => {
+      if (!p?.id) return;
+      const loc = merged[p.id];
+      // For action logs: take whichever has more entries (user might have added on either device)
+      if (!loc) { merged[p.id] = p; return; }
+      const supaLogs = p.actionLog || [];
+      const localLogs = loc.actionLog || [];
+      if (supaLogs.length > localLogs.length) {
+        // merge logs: union by id
+        const logMap = {};
+        localLogs.forEach(e => { if (e?.id) logMap[e.id] = e; });
+        supaLogs.forEach(e => { if (e?.id) logMap[e.id] = e; });
+        merged[p.id] = { ...p, actionLog: Object.values(logMap).sort((a,b) => a.ts < b.ts ? 1 : -1) };
+      }
+    });
+    const mergedProjs = Object.values(merged);
+    saveLocal('projects', mergedProjs);
+    projects = mergedProjs;
+    syncToSupabase('projects', mergedProjs);
+    mergedProjs.forEach(p => { if (p?.id) syncToSupabase('proj_' + p.id, p); });
+  }
+
   // Update in-memory state directly — no reload needed
   if (mergedDocs) {
     docs = mergedDocs;
     saveLocal('docs', mergedDocs);
-    // Push the merged result back to Supabase immediately (don't wait for 8s throttle)
     syncToSupabase('docs', mergedDocs);
     renderDocs();
     if (typeof renderFolders === 'function') renderFolders();
   }
   const res = document.getElementById('dr-supa-result');
-  if (res) res.textContent = `✅ Done — ${mergedDocs ? mergedDocs.length : '?'} docs restored. Check the Docs tab.`;
+  if (res) res.textContent = `✅ Recovered — ${mergedDocs ? mergedDocs.length : '?'} docs, ${projects.length} projects. Check your project action logs.`;
   if (btn) btn.style.display = 'none';
   document.getElementById('docs-recovery-modal')?.remove();
-  switchTab('docs');
+  if (typeof renderProjects === 'function') renderProjects();
+  if (typeof renderProjectDetail === 'function') renderProjectDetail();
 }
 
 function exportAllDataJSON() {
