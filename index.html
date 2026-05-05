@@ -2494,69 +2494,89 @@ const SUPA_MAP = {
   financeLinks:    { table:'settings', id:'financeLinks' },
 };
 
-// Throttle: queue writes and flush at most once every 30s to stay within free tier disk IO
-const _supaQueue = {};
-let _supaFlushTimer = null;
+// ── Supabase sync: TWO separate queues so individual rows (500ms) never wait for bulk (8s) ──
+const _supaQueueIndiv = {}; // doc_*, taskday_*, proj_* — small rows, flush fast
+const _supaQueueBulk  = {}; // everything else — bulk arrays, flush slower
+let _supaFlushTimerIndiv = null;
+let _supaFlushTimerBulk  = null;
+
+async function _supaDoFlush(entries) {
+  for (const [k, v] of entries) {
+    if (k.startsWith('doc_') && k.length > 10 && !SUPA_MAP[k]) {
+      try { await sb.from('docs').upsert({ id: k, data: v }, { onConflict: 'id' }); }
+      catch(e) { console.warn('supa doc:', k, e.message); }
+      continue;
+    }
+    if (k.startsWith('taskday_') && !SUPA_MAP[k]) {
+      try { await sb.from('tasks').upsert({ id: k, date: k, data: v }, { onConflict: 'id' }); }
+      catch(e) { console.warn('supa taskday:', k, e.message); }
+      continue;
+    }
+    if (k.startsWith('proj_') && !SUPA_MAP[k]) {
+      try { await sb.from('projects').upsert({ id: k, data: v }, { onConflict: 'id' }); }
+      catch(e) { console.warn('supa proj:', k, e.message); }
+      continue;
+    }
+    const mp = SUPA_MAP[k]; if (!mp) continue;
+    try {
+      await sb.from(mp.table).upsert(
+        mp.table === 'tasks'    ? { id: mp.id, date: k, data: v } :
+        mp.table === 'docs'     ? { id: mp.id, data: v } :
+        mp.table === 'projects' ? { id: mp.id, data: v } :
+        mp.table === 'schedule' ? { week_key: mp.id, data: v } :
+                                  { key: mp.id, value: v },
+        { onConflict: mp.table === 'schedule' ? 'week_key' : mp.table === 'settings' ? 'key' : 'id' }
+      );
+    } catch(e) { console.warn('supa bulk:', k, e.message); }
+  }
+}
+
 function syncToSupabase(key, val) {
   const m = SUPA_MAP[key];
-  // Allow individual rows not in static map: doc_xxx (docs), taskday_YYYY-MM-DD (tasks), proj_xxx (projects)
   const isIndivDoc     = !m && typeof key === 'string' && key.startsWith('doc_') && key.length > 10;
   const isIndivTaskDay = !m && typeof key === 'string' && key.startsWith('taskday_');
   const isIndivProj    = !m && typeof key === 'string' && key.startsWith('proj_');
   if (!m && !isIndivDoc && !isIndivTaskDay && !isIndivProj) return;
-  _supaQueue[key] = val;
-  // Always restart timer so latest changes are included — individual rows flush in 2s, bulk in 8s
+
   const isIndiv = isIndivDoc || isIndivTaskDay || isIndivProj;
-  clearTimeout(_supaFlushTimer);
-  _supaFlushTimer = setTimeout(async () => {
-    _supaFlushTimer = null;
-    const entries = Object.entries(_supaQueue);
-    for (const k in _supaQueue) delete _supaQueue[k];
-    for (const [k, v] of entries) {
-      // Individual doc row
-      if (k.startsWith('doc_') && k.length > 10 && !SUPA_MAP[k]) {
-        try { await sb.from('docs').upsert({ id: k, data: v }, { onConflict: 'id' }); } catch(e) { console.warn('Supabase doc sync error:', k, e.message); }
-        continue;
-      }
-      // Individual task-day row
-      if (k.startsWith('taskday_') && !SUPA_MAP[k]) {
-        try { await sb.from('tasks').upsert({ id: k, date: k, data: v }, { onConflict: 'id' }); } catch(e) { console.warn('Supabase taskday sync error:', k, e.message); }
-        continue;
-      }
-      // Individual project row
-      if (k.startsWith('proj_') && !SUPA_MAP[k]) {
-        try { await sb.from('projects').upsert({ id: k, data: v }, { onConflict: 'id' }); } catch(e) { console.warn('Supabase proj sync error:', k, e.message); }
-        continue;
-      }
-      const mp = SUPA_MAP[k]; if (!mp) continue;
-      try {
-        await sb.from(mp.table).upsert(
-          mp.table === 'tasks'    ? { id: mp.id, date: k, data: v } :
-          mp.table === 'docs'     ? { id: mp.id, data: v } :
-          mp.table === 'projects' ? { id: mp.id, data: v } :
-          mp.table === 'schedule' ? { week_key: mp.id, data: v } :
-                                    { key: mp.id, value: v },
-          { onConflict: mp.table === 'schedule' ? 'week_key' : mp.table === 'settings' ? 'key' : 'id' }
-        );
-      } catch(e) { console.warn('Supabase sync error:', k, e.message); }
-    }
-  }, isIndiv ? 2000 : 8000); // individual rows flush in 2s; bulk arrays in 8s
+  if (isIndiv) {
+    // Individual rows: dedicated 500ms timer — never delayed by bulk syncs
+    _supaQueueIndiv[key] = val;
+    clearTimeout(_supaFlushTimerIndiv);
+    _supaFlushTimerIndiv = setTimeout(async () => {
+      _supaFlushTimerIndiv = null;
+      const entries = Object.entries(_supaQueueIndiv);
+      for (const k in _supaQueueIndiv) delete _supaQueueIndiv[k];
+      await _supaDoFlush(entries);
+    }, 500);
+  } else {
+    // Bulk arrays: separate 8s timer — doesn't interfere with individual rows
+    _supaQueueBulk[key] = val;
+    clearTimeout(_supaFlushTimerBulk);
+    _supaFlushTimerBulk = setTimeout(async () => {
+      _supaFlushTimerBulk = null;
+      const entries = Object.entries(_supaQueueBulk);
+      for (const k in _supaQueueBulk) delete _supaQueueBulk[k];
+      await _supaDoFlush(entries);
+    }, 8000);
+  }
 }
 
 // ── Emergency flush on page close/refresh ─────────────────────────────────
-// Uses fetch keepalive so the request completes even after the page unloads.
-// This prevents data loss when the tab is closed or hard-refreshed before
-// the 8s throttle timer fires.
-let _supaAccessToken = null; // stored after successful login
+// keepalive fetch completes even after the page unloads.
+// Individual rows are small — they reliably fit the 64KB keepalive limit.
+let _supaAccessToken = null; // kept fresh by onAuthStateChange (SIGNED_IN + TOKEN_REFRESHED)
 window.addEventListener('beforeunload', () => {
-  const entries = Object.entries(_supaQueue);
+  clearTimeout(_supaFlushTimerIndiv); clearTimeout(_supaFlushTimerBulk);
+  _supaFlushTimerIndiv = null; _supaFlushTimerBulk = null;
+  // Drain both queues — individual first (most critical)
+  const entries = [...Object.entries(_supaQueueIndiv), ...Object.entries(_supaQueueBulk)];
+  for (const k in _supaQueueIndiv) delete _supaQueueIndiv[k];
+  for (const k in _supaQueueBulk)  delete _supaQueueBulk[k];
   if (!entries.length) return;
-  clearTimeout(_supaFlushTimer); _supaFlushTimer = null;
-  for (const k in _supaQueue) delete _supaQueue[k];
   const token = _supaAccessToken || SUPA_KEY;
   entries.forEach(([k, v]) => {
     let table, row, onConflict;
-    // Individual rows (small — fit in keepalive 64KB limit)
     if (k.startsWith('doc_') && k.length > 10 && !SUPA_MAP[k]) {
       table = 'docs'; row = { id: k, data: v }; onConflict = 'id';
     } else if (k.startsWith('taskday_') && !SUPA_MAP[k]) {
@@ -2572,10 +2592,9 @@ window.addEventListener('beforeunload', () => {
       else if (mp.table === 'schedule') { row = { week_key: mp.id, data: v };     onConflict = 'week_key'; }
       else                              { row = { key: mp.id, value: v };         onConflict = 'key'; }
     }
-    // Skip large bulk-docs flush on unload — individual doc rows handle it reliably
-    if (k === 'docs') return;
+    if (k === 'docs') return; // bulk docs too large — individual doc_ rows handle it
     const body = JSON.stringify(row);
-    if (body.length > 60000) return; // keepalive limit ~64KB — skip oversized entries
+    if (body.length > 60000) return; // keepalive hard limit ~64KB
     try {
       fetch(`${SUPA_URL}/rest/v1/${table}?on_conflict=${onConflict}`, {
         method: 'POST',
@@ -2731,23 +2750,40 @@ async function loadFromSupabase() {
       }
     });
 
+    // Helper: union-merge action logs — never lose an entry due to timestamp comparison
+    function _mergeActionLogs(a, b) {
+      const map = {};
+      (a || []).forEach(e => { if (e?.id) map[e.id] = e; });
+      (b || []).forEach(e => { if (e?.id) map[e.id] = e; });
+      return Object.values(map).sort((x, y) => x.ts < y.ts ? 1 : -1);
+    }
+
+    function _mergeProj(existing, incoming) {
+      if (!existing) return incoming;
+      // Pick winner for all fields by timestamp, but ALWAYS union action logs
+      const winner = (incoming._updatedTs || 0) > (existing._updatedTs || 0)
+        ? { ...incoming } : { ...existing };
+      winner.actionLog = _mergeActionLogs(existing.actionLog, incoming.actionLog);
+      return winner;
+    }
+
     const localProjs = Array.isArray(loadLocal('projects', [])) ? loadLocal('projects', []) : [];
     const merged = {};
     localProjs.forEach(p => { if (p?.id) merged[p.id] = p; });
     Object.values(bulkProjMap).forEach(p => {
-      const loc = merged[p.id];
-      if (!loc || (p._updatedTs || 0) > (loc._updatedTs || 0)) merged[p.id] = p;
+      merged[p.id] = _mergeProj(merged[p.id], p);
     });
     Object.values(indivProjMap).forEach(p => {
-      const loc = merged[p.id];
-      // Individual row wins on tie — it's the dedicated per-project sync
-      if (!loc || (p._updatedTs || 0) > (loc._updatedTs || 0)) merged[p.id] = p;
+      // Individual rows are most authoritative (dedicated per-project sync)
+      merged[p.id] = _mergeProj(merged[p.id], p);
     });
 
     const finalProjs = Object.values(merged);
     if (finalProjs.length > 0) {
       saveLocal('projects', finalProjs);
-      if (finalProjs.length > Object.keys(bulkProjMap).length) syncToSupabase('projects', finalProjs);
+      // Always push merged result back — propagates action log unions to all devices
+      finalProjs.forEach(p => { if (p?.id) syncToSupabase('proj_' + p.id, p); });
+      syncToSupabase('projects', finalProjs);
     } else if (localProjs.length > 0) {
       console.warn('[sync] No projects in Supabase, re-pushing local');
       syncToSupabase('projects', localProjs);
@@ -3492,8 +3528,10 @@ async function initAuth() {
     return;
   }
 
-  // Listen for sign-in (magic link click)
+  // Listen for sign-in (magic link click) and token refreshes
   sb.auth.onAuthStateChange(async (event, session) => {
+    // Keep access token fresh so beforeunload keepalive always has a valid token
+    if (session?.access_token) _supaAccessToken = session.access_token;
     if (event === 'SIGNED_IN' && session) {
       const userEmail = session.user.email?.toLowerCase();
       if (!ALL_HEIDI.includes(userEmail)) {
@@ -3503,7 +3541,6 @@ async function initAuth() {
       }
       window.history.replaceState(null, '', window.location.pathname);
       localStorage.setItem('dash_authed', '1');
-      _supaAccessToken = session.access_token || null;
       showApp();
     }
   });
