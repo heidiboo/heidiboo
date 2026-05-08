@@ -2463,9 +2463,16 @@ function save(key, val) {
     if (ydCard) { ydCard._updatedTs = ydCard._updatedTs || Date.now(); syncToSupabase('taskday_' + ydStr, ydCard); }
   }
 
-  // For projects: sync each project as its own small row (action logs are the critical data)
+  // For projects: only individually sync projects that were recently modified
+  // (identified by _updatedTs set within the last 10s by the caller).
+  // NEVER mass-stamp all projects — that corrupts timestamps on unmodified projects.
   if (key === 'projects' && Array.isArray(val)) {
-    val.forEach(p => { if (p?.id) { p._updatedTs = Date.now(); syncToSupabase('proj_' + p.id, p); } });
+    const recentCutoff = Date.now() - 10000;
+    val.forEach(p => {
+      if (p?.id && (p._updatedTs || 0) > recentCutoff) {
+        syncToSupabase('proj_' + p.id, p);
+      }
+    });
   }
 
   saveLocal(key, val);
@@ -2499,6 +2506,22 @@ const _supaQueueIndiv = {}; // doc_*, taskday_*, proj_* — small rows, flush fa
 const _supaQueueBulk  = {}; // everything else — bulk arrays, flush slower
 let _supaFlushTimerIndiv = null;
 let _supaFlushTimerBulk  = null;
+
+// flushNow — immediate fire-and-forget write, no timer, no queue.
+// Use for discrete high-value user actions (add note, check task) where
+// a timer delay means data loss if the tab closes before it fires.
+function flushNow(key, val) {
+  if (key.startsWith('proj_') && !SUPA_MAP[key]) {
+    sb.from('projects').upsert({ id: key, data: val }, { onConflict: 'id' })
+      .catch(e => console.warn('[flushNow] proj:', key, e.message));
+  } else if (key.startsWith('taskday_') && !SUPA_MAP[key]) {
+    sb.from('tasks').upsert({ id: key, date: key, data: val }, { onConflict: 'id' })
+      .catch(e => console.warn('[flushNow] taskday:', key, e.message));
+  } else if (key.startsWith('doc_') && key.length > 10 && !SUPA_MAP[key]) {
+    sb.from('docs').upsert({ id: key, data: val }, { onConflict: 'id' })
+      .catch(e => console.warn('[flushNow] doc:', key, e.message));
+  }
+}
 
 async function _supaDoFlush(entries) {
   for (const [k, v] of entries) {
@@ -3509,6 +3532,23 @@ async function initAuth() {
   } catch(e) {
     console.warn('Supabase getSession failed or timed out:', e);
   }
+  // Always register auth state listener — captures token refreshes even for returning users.
+  // Without this, the keepalive access token goes stale after 1h for users who never re-login.
+  sb.auth.onAuthStateChange(async (event, session) => {
+    if (session?.access_token) _supaAccessToken = session.access_token;
+    if (event === 'SIGNED_IN' && session) {
+      const userEmail = session.user.email?.toLowerCase();
+      if (!ALL_HEIDI.includes(userEmail)) {
+        await sb.auth.signOut();
+        showLoginScreen('Access denied — this is a private space.');
+        return;
+      }
+      window.history.replaceState(null, '', window.location.pathname);
+      localStorage.setItem('dash_authed', '1');
+      if (document.getElementById('login-screen').style.display !== 'none') showApp();
+    }
+  });
+
   if (session) {
     const userEmail = session.user.email?.toLowerCase();
     if (!ALL_HEIDI.includes(userEmail)) {
@@ -3527,23 +3567,6 @@ async function initAuth() {
     showApp(true); // offlineMode: skip loadFromSupabase so it can't wipe local data
     return;
   }
-
-  // Listen for sign-in (magic link click) and token refreshes
-  sb.auth.onAuthStateChange(async (event, session) => {
-    // Keep access token fresh so beforeunload keepalive always has a valid token
-    if (session?.access_token) _supaAccessToken = session.access_token;
-    if (event === 'SIGNED_IN' && session) {
-      const userEmail = session.user.email?.toLowerCase();
-      if (!ALL_HEIDI.includes(userEmail)) {
-        await sb.auth.signOut();
-        showLoginScreen('Access denied — this is a private space.');
-        return;
-      }
-      window.history.replaceState(null, '', window.location.pathname);
-      localStorage.setItem('dash_authed', '1');
-      showApp();
-    }
-  });
 
   showLoginScreen();
 }
@@ -3796,7 +3819,11 @@ function renderProjects() {
   const mkPhaseSel = (p,i) => `<select class="badge-select badge-phase" onchange="updateProject(${i},'phase',this.value)">
     ${['Discovery','Define','Design','Prototype','Test','Handoff'].map(s=>`<option${p.phase===s?' selected':''}>${s}</option>`).join('')}
   </select>`;
-  tbody.innerHTML = projects.map((p, i) => {
+  // Sort: most recently opened first, then by creation order for unopened projects
+  const sorted = projects
+    .map((p, i) => ({ p, i }))
+    .sort((a, b) => (b.p.lastOpened || 0) - (a.p.lastOpened || 0));
+  tbody.innerHTML = sorted.map(({ p, i }) => {
     return `<tr class="proj-row-click" onclick="openProject(${i})">
       <td><div class="project-name">${escHtml(p.name)}<small>${escHtml(p.team || '')}</small></div></td>
       <td onclick="event.stopPropagation()">${mkStatusSel(p,i)}</td>
@@ -4163,8 +4190,12 @@ function toggleTodoById(id) {
   const t = day.tasks.find(t => t.id === id);
   if (t) t.done = !t.done;
   sortTasksInDay(day);
-  day._updatedTs = Date.now(); // stamp so this version wins on merge
-  save('taskDays', taskDays);
+  day._updatedTs = Date.now();
+  saveLocal('taskDays', taskDays);        // instant local write
+  const todayKey = new Date().toISOString().slice(0, 10);
+  flushNow('taskday_' + todayKey, day);  // instant Supabase write — no timer
+  syncToSupabase('taskday_' + todayKey, day); // also queue as backup
+  syncToSupabase('taskDays', taskDays);
   renderTodos();
   renderFocusTodos();
   renderTaskDays();
@@ -4221,6 +4252,7 @@ function addProject() {
 function updateProject(i, field, value) {
   if (!projects[i]) return;
   projects[i][field] = value;
+  projects[i]._updatedTs = Date.now();
   save('projects', projects);
   const statusBadge = { Active:'badge-active', Review:'badge-review', Done:'badge-done', Paused:'badge-paused' };
   const sizeBadge = { Small:'badge-sm', Medium:'badge-md', Large:'badge-lg' };
@@ -7360,6 +7392,9 @@ let _currentProjectIdx = -1;
 function openProject(i) {
   _currentProjectIdx = i;
   const p = projects[i];
+  p.lastOpened = Date.now();           // track for sorting
+  p._updatedTs = p._updatedTs || Date.now();
+  saveLocal('projects', projects);     // persist sort order instantly (no Supabase write needed)
   document.getElementById('proj-list-view').style.display = 'none';
   document.getElementById('proj-detail-view').style.display = 'block';
   renderProjectDetail();
@@ -7818,10 +7853,13 @@ function addActionLog(pi) {
   const ts = now.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) + ' · ' +
     now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true});
   p.actionLog.push({ id: 'log_'+Date.now(), text, ts });
-  p._updatedTs = Date.now(); // stamp so this project wins on merge after refresh
-  save('projects', projects);
+  p._updatedTs = Date.now();
+  saveLocal('projects', projects);           // instant local write
+  flushNow('proj_' + p.id, p);              // instant Supabase write — no timer, no delay
+  syncToSupabase('proj_' + p.id, p);        // also queue in timer as belt-and-suspenders backup
+  syncToSupabase('projects', projects);      // bulk backup
   inp.value = '';
-  renderProjectDetail(); // re-renders with input hidden
+  renderProjectDetail();
 }
 
 function editActionLog(pi, logId, newHTML) {
