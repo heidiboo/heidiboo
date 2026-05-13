@@ -2793,20 +2793,30 @@ async function loadFromSupabase() {
     const localProjs = Array.isArray(loadLocal('projects', [])) ? loadLocal('projects', []) : [];
     const merged = {};
     localProjs.forEach(p => { if (p?.id) merged[p.id] = p; });
+
+    // Track whether merge actually changed anything — avoid flooding Supabase on every load
+    let mergeGainedData = false;
     Object.values(bulkProjMap).forEach(p => {
+      const before = merged[p.id];
       merged[p.id] = _mergeProj(merged[p.id], p);
+      if (!before || (merged[p.id].actionLog?.length || 0) > (before.actionLog?.length || 0)) mergeGainedData = true;
     });
     Object.values(indivProjMap).forEach(p => {
-      // Individual rows are most authoritative (dedicated per-project sync)
+      const before = merged[p.id];
       merged[p.id] = _mergeProj(merged[p.id], p);
+      if (!before || (merged[p.id].actionLog?.length || 0) > (before.actionLog?.length || 0)) mergeGainedData = true;
     });
+    // New project in Supabase that wasn't local
+    if (Object.keys(merged).length > localProjs.length) mergeGainedData = true;
 
     const finalProjs = Object.values(merged);
     if (finalProjs.length > 0) {
       saveLocal('projects', finalProjs);
-      // Always push merged result back — propagates action log unions to all devices
-      finalProjs.forEach(p => { if (p?.id) syncToSupabase('proj_' + p.id, p); });
-      syncToSupabase('projects', finalProjs);
+      // Only push back to Supabase if merge gained new data — avoids N upserts on every startup
+      if (mergeGainedData) {
+        finalProjs.forEach(p => { if (p?.id) syncToSupabase('proj_' + p.id, p); });
+        syncToSupabase('projects', finalProjs);
+      }
     } else if (localProjs.length > 0) {
       console.warn('[sync] No projects in Supabase, re-pushing local');
       syncToSupabase('projects', localProjs);
@@ -3602,38 +3612,50 @@ async function showApp(offlineMode) {
   if (window._stopLoginSprite) window._stopLoginSprite();
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('work-app').style.display = 'block';
-  if (!offlineMode) {
-    showSyncStatus('Syncing...');
-    try { await loadFromSupabase(); } catch(e) { console.warn('Supabase load failed, using local data:', e); }
-    hideSyncStatus();
-  }
+
+  // ── Show immediately with local data — never block startup on Supabase ──
+  // This means the app is always instant. Supabase syncs in the background
+  // and re-renders when done. If Supabase is slow or offline, local data is used.
   init();
 
-  // Get current user email
-  let session = null;
-  try { const { data } = await sb.auth.getSession(); session = data?.session; } catch(e) {};
-  const userEmail = session?.user?.email?.toLowerCase() || '';
-  window._currentUserEmail = userEmail;
-
-  // Show control center gear only for primary email
-  if (userEmail === HEIDI_PRIMARY) {
-    const ccBtn = document.getElementById('cc-btn');
-    if (ccBtn) ccBtn.style.display = 'block';
-    // Log this login
-    logLoginEvent(userEmail, 'login');
-  } else {
-    // Still log non-primary approved logins
-    logLoginEvent(userEmail, 'login');
-  }
+  // Get current user email (non-blocking — runs in parallel with background sync)
+  sb.auth.getSession().then(({ data }) => {
+    const userEmail = data?.session?.user?.email?.toLowerCase() || '';
+    window._currentUserEmail = userEmail;
+    if (userEmail === HEIDI_PRIMARY) {
+      const ccBtn = document.getElementById('cc-btn');
+      if (ccBtn) ccBtn.style.display = 'block';
+      logLoginEvent(userEmail, 'login');
+    } else if (userEmail) {
+      logLoginEvent(userEmail, 'login');
+    }
+  }).catch(() => {});
 
   // Add sign out button to topbar
   const topbar = document.querySelector('.focus-topbar') || document.querySelector('.header-left');
-  if (topbar) {
+  if (topbar && !topbar.querySelector('.signout-btn')) {
     const btn = document.createElement('button');
+    btn.className = 'signout-btn';
     btn.textContent = 'Sign out';
     btn.style.cssText = 'font-size:10px;background:none;border:none;color:rgba(255,255,255,0.4);cursor:pointer;font-family:var(--mono);letter-spacing:0.05em;padding:4px 8px;border-radius:4px;margin-left:8px';
     btn.onclick = async () => { await sb.auth.signOut(); location.reload(); };
     topbar.appendChild(btn);
+  }
+
+  if (!offlineMode) {
+    // Background sync — loads Supabase, merges into localStorage, re-renders UI
+    showSyncStatus('Syncing...');
+    loadFromSupabase()
+      .then(() => {
+        loadAll();    // re-read merged localStorage into in-memory vars
+        renderAll();  // re-render UI with fresh data
+        if (_currentProjectIdx >= 0) renderProjectDetail();
+        hideSyncStatus();
+      })
+      .catch(e => {
+        console.warn('Supabase sync failed, using local data:', e);
+        hideSyncStatus();
+      });
   }
 }
 
@@ -5469,17 +5491,17 @@ function autoSaveDoc() {
   const idx = docs.findIndex(d => d.id === currentDocId);
   if (idx > -1) {
     const existingBody = docs[idx].body || '';
-    // Never overwrite a real body with an empty editor — protects against content being
-    // wiped when a doc is opened on a device where Supabase had no body data
+    const prevTitle = docs[idx].title;
+    // Never overwrite real content with an empty editor
     const safeBody = (!body || body === '<br>' || body === '<p><br></p>') && existingBody.length > 100
-      ? existingBody
-      : body;
+      ? existingBody : body;
     docs[idx] = { ...docs[idx], title, body: safeBody, project, updatedAt: now, updatedTs: Date.now() };
-    saveLocal('docs', docs);  // write full array to localStorage immediately
-    syncToSupabase(currentDocId, docs[idx]); // sync this one doc as its own Supabase row (small, always fits keepalive)
-    syncToSupabase('docs', docs);            // also sync the bulk array as a backup
-    renderDocs();
-    // Flash "Saved" indicator
+    saveLocal('docs', docs);                      // localStorage already up to date from triggerSave, but ensure project+title are current
+    flushNow(currentDocId, docs[idx]);            // immediate Supabase write — no timer delay
+    syncToSupabase(currentDocId, docs[idx]);      // also queue in timer as backup
+    syncToSupabase('docs', docs);
+    if (title !== prevTitle) renderDocs();        // only re-render sidebar when title changed (expensive)
+    // Flash "Saved"
     const ind = document.getElementById('doc-autosave-indicator');
     if (ind) { ind.style.opacity = '1'; clearTimeout(autoSaveTimer); autoSaveTimer = setTimeout(() => ind.style.opacity = '0', 1500); }
   }
@@ -5816,9 +5838,30 @@ function setupEditor() {
   const editor = document.getElementById('doc-body-input');
   const titleInput = document.getElementById('doc-title-input');
 
-  // Autosave on any change
+  // Autosave on any change:
+  // - localStorage: written IMMEDIATELY on every keystroke (never lose content)
+  // - Supabase: debounced 600ms (network call, needs throttling)
   let saveDebounce;
-  const triggerSave = () => { clearTimeout(saveDebounce); saveDebounce = setTimeout(autoSaveDoc, 800); };
+  const triggerSave = () => {
+    // Immediate localStorage write — protects against tab-close data loss
+    if (currentDocId) {
+      const idx = docs.findIndex(d => d.id === currentDocId);
+      if (idx > -1) {
+        const body = editor.innerHTML;
+        const title = (titleInput.value || '').trim() || 'Untitled';
+        const existing = docs[idx].body || '';
+        const safeBody = (!body || body === '<br>' || body === '<p><br></p>') && existing.length > 100
+          ? existing : body;
+        if (safeBody && safeBody !== '<br>' && safeBody !== '<p><br></p>') {
+          docs[idx] = { ...docs[idx], title, body: safeBody, updatedTs: Date.now() };
+          saveLocal('docs', docs);
+        }
+      }
+    }
+    // Debounced Supabase sync
+    clearTimeout(saveDebounce);
+    saveDebounce = setTimeout(autoSaveDoc, 600);
+  };
   editor.addEventListener('input', triggerSave);
   titleInput.addEventListener('input', triggerSave);
   document.getElementById('doc-project-link').addEventListener('change', autoSaveDoc);
