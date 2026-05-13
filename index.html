@@ -2417,8 +2417,57 @@ try {
 }
 
 // localStorage still used as fast local cache + offline fallback
-function saveLocal(key, val) { try { localStorage.setItem('dash_'+key, JSON.stringify(val)); } catch(e){} }
+function saveLocal(key, val) {
+  const serialized = JSON.stringify(val);
+  try {
+    localStorage.setItem('dash_'+key, serialized);
+  } catch(e) {
+    if (e?.name === 'QuotaExceededError' || e?.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e?.code === 22) {
+      console.warn('[storage] localStorage full saving', key, '— attempting recovery');
+      // Free space: trim old task days (keep last 60)
+      try {
+        const td = JSON.parse(localStorage.getItem('dash_taskDays') || '[]');
+        if (td.length > 60) localStorage.setItem('dash_taskDays', JSON.stringify(td.slice(0, 60)));
+      } catch(_) {}
+      // For docs: strip base64 images from bodies — they're large and already in Supabase
+      if (key === 'docs' && Array.isArray(val)) {
+        try {
+          const stripped = val.map(d => {
+            if (!d?.body?.includes('data:image')) return d;
+            return { ...d, body: d.body.replace(/<img[^>]+data:image[^>]+>/gi, '<p>[image — open doc to reload]</p>') };
+          });
+          localStorage.setItem('dash_'+key, JSON.stringify(stripped));
+          _showStorageWarning('Images stripped from local cache to free space. Your docs are safe in Supabase.');
+          return;
+        } catch(_) {}
+      }
+      // Last resort: retry with same data (may fail again, but at least it tried)
+      try { localStorage.setItem('dash_'+key, serialized); } catch(_) {
+        _showStorageWarning('Browser storage is full. Open the backup panel (⚙) and download a backup.');
+      }
+    }
+  }
+}
 function loadLocal(key, def) { try { return JSON.parse(localStorage.getItem('dash_'+key)) ?? def; } catch { return def; } }
+
+let _storageWarnTimer = null;
+function _showStorageWarning(msg) {
+  if (document.getElementById('storage-warn')) return;
+  const el = document.createElement('div');
+  el.id = 'storage-warn';
+  el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#c0392b;color:#fff;padding:11px 18px;border-radius:8px;font-size:12px;font-family:var(--mono);z-index:9999;display:flex;align-items:center;gap:12px;max-width:460px;box-shadow:0 4px 20px rgba(0,0,0,0.3)';
+  el.innerHTML = `<span>⚠ Storage: ${msg}</span><button onclick="document.getElementById('storage-warn').remove()" style="background:rgba(255,255,255,0.25);border:none;color:#fff;cursor:pointer;padding:3px 10px;border-radius:4px;font-size:11px;white-space:nowrap">OK</button>`;
+  document.body.appendChild(el);
+  clearTimeout(_storageWarnTimer);
+  _storageWarnTimer = setTimeout(() => el?.remove(), 8000);
+}
+
+// getLocalStorageUsageKB — how many KB of localStorage is in use
+function getLocalStorageUsageKB() {
+  let total = 0;
+  for (const k of Object.keys(localStorage)) total += (localStorage.getItem(k)||'').length * 2; // UTF-16
+  return Math.round(total / 1024);
+}
 
 // One-time migration: copy old unprefixed keys → dash_ prefixed keys
 (function migrateLocalStorage() {
@@ -2856,7 +2905,9 @@ function openDocsRecovery() {
             ⬆ Restore from backup file
             <input type="file" accept=".json" style="display:none" onchange="importFromJSON(this.files[0]);this.value=''">
           </label>
+          <div id="dr-storage-bar" style="font-size:11px;color:#888;font-family:var(--mono);padding:6px 2px"></div>
           <button onclick="drCheckSupabase()" style="padding:10px 14px;border:1px solid rgba(0,0,0,0.12);border-radius:8px;font-size:13px;cursor:pointer;color:#555;background:#fff;text-align:left">🔍 Check what's in Supabase</button>
+          <button onclick="drClearOldStorage()" style="padding:10px 14px;border:1px solid rgba(0,0,0,0.12);border-radius:8px;font-size:13px;cursor:pointer;color:#555;background:#fff;text-align:left">🧹 Free up local storage space</button>
           <pre id="dr-supa-result" style="display:none;font-size:11px;color:#444;background:rgba(0,0,0,0.04);padding:12px;border-radius:8px;white-space:pre-wrap;word-break:break-word;max-height:220px;overflow-y:auto"></pre>
           <button id="dr-recover-btn" onclick="drRecoverFromSupabase()" style="display:none;padding:10px 14px;background:#c44;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer">↩ Pull missing docs from Supabase</button>
         </div>
@@ -2866,6 +2917,49 @@ function openDocsRecovery() {
   } else {
     modal.style.display = 'flex';
   }
+  // Show storage usage
+  const bar = document.getElementById('dr-storage-bar');
+  if (bar) {
+    const used = getLocalStorageUsageKB();
+    const limit = 5120; // 5 MB typical browser limit
+    const pct = Math.min(100, Math.round(used / limit * 100));
+    const color = pct > 80 ? '#c0392b' : pct > 60 ? '#e67e22' : '#27ae60';
+    bar.innerHTML = `Local storage: <strong style="color:${color}">${used} KB / ~5 MB used (${pct}%)</strong>${pct > 70 ? ' — getting full, images may not save locally' : ''}`;
+  }
+}
+
+// Free up local storage: strip base64 images from doc bodies, trim old task days
+function drClearOldStorage() {
+  let freed = 0;
+  // Strip base64 images from docs in localStorage
+  try {
+    const rawDocs = JSON.parse(localStorage.getItem('dash_docs') || '[]');
+    const stripped = rawDocs.map(d => {
+      if (!d?.body?.includes('data:image')) return d;
+      const before = d.body.length;
+      const newBody = d.body.replace(/<img[^>]+data:image[^>]+>/gi, '<p>[image — open doc to reload]</p>');
+      freed += before - newBody.length;
+      return { ...d, body: newBody };
+    });
+    localStorage.setItem('dash_docs', JSON.stringify(stripped));
+    docs = stripped; // update in-memory too
+  } catch(e) {}
+  // Trim task days older than 90 days
+  try {
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 90);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    const td = JSON.parse(localStorage.getItem('dash_taskDays') || '[]');
+    const trimmed = td.filter(d => d.date >= cutoffStr);
+    if (trimmed.length < td.length) {
+      freed += JSON.stringify(td).length - JSON.stringify(trimmed).length;
+      localStorage.setItem('dash_taskDays', JSON.stringify(trimmed));
+    }
+  } catch(e) {}
+  const freedKB = Math.round(freed / 1024);
+  const used = getLocalStorageUsageKB();
+  const bar = document.getElementById('dr-storage-bar');
+  if (bar) bar.innerHTML = `Local storage: <strong>${used} KB / ~5 MB</strong> — freed ~${freedKB} KB. Images are still in Supabase.`;
+  alert(`Freed ~${freedKB} KB of local storage.\nImages were removed from local cache (they're still in Supabase — open any doc to reload them).`);
 }
 
 async function drCheckSupabase() {
