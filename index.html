@@ -1873,15 +1873,26 @@ function saveLocal(key, val) {
 function loadLocal(key, def) { try { return JSON.parse(localStorage.getItem('dash_'+key)) ?? def; } catch { return def; } }
 
 let _storageWarnTimer = null;
+function _clearLocalCache() {
+  const keysToRemove = Object.keys(localStorage).filter(k => k.startsWith('dash_'));
+  keysToRemove.forEach(k => { try { localStorage.removeItem(k); } catch(_) {} });
+  location.reload();
+}
+
 function _showStorageWarning(msg) {
-  if (document.getElementById('storage-warn')) return;
+  const existing = document.getElementById('storage-warn');
+  if (existing) existing.remove();
   const el = document.createElement('div');
   el.id = 'storage-warn';
-  el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#c0392b;color:#fff;padding:11px 18px;border-radius:8px;font-size:12px;font-family:var(--mono);z-index:9999;display:flex;align-items:center;gap:12px;max-width:460px;box-shadow:0 4px 20px rgba(0,0,0,0.3)';
-  el.innerHTML = `<span>⚠ Storage: ${msg}</span><button onclick="document.getElementById('storage-warn').remove()" style="background:rgba(255,255,255,0.25);border:none;color:#fff;cursor:pointer;padding:3px 10px;border-radius:4px;font-size:11px;white-space:nowrap">OK</button>`;
+  el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#c0392b;color:#fff;padding:14px 18px;border-radius:10px;font-size:12px;font-family:var(--mono);z-index:9999;max-width:480px;box-shadow:0 4px 20px rgba(0,0,0,0.35);line-height:1.5';
+  el.innerHTML = '<div style="margin-bottom:10px">⚠ ' + msg + '</div>'
+    + '<div style="display:flex;gap:8px">'
+    + '<button onclick="_clearLocalCache()" style="flex:1;background:#fff;color:#c0392b;border:none;cursor:pointer;padding:6px 10px;border-radius:5px;font-size:11px;font-family:var(--mono);font-weight:600">Reset local cache (safe — reloads from cloud)</button>'
+    + '<button onclick="document.getElementById(\'storage-warn\').remove()" style="background:rgba(255,255,255,0.2);border:none;color:#fff;cursor:pointer;padding:6px 10px;border-radius:5px;font-size:11px">Dismiss</button>'
+    + '</div>';
   document.body.appendChild(el);
   clearTimeout(_storageWarnTimer);
-  _storageWarnTimer = setTimeout(() => el?.remove(), 8000);
+  _storageWarnTimer = setTimeout(() => el?.remove(), 20000);
 }
 
 // getLocalStorageUsageKB — how many KB of localStorage is in use
