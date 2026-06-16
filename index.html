@@ -3016,32 +3016,44 @@ async function requestAccess() {
   btn.textContent = 'Sending...';
   msg.textContent = '';
 
-  // Send Heidi an approval email via EmailJS
-  const displayName = ALL_HEIDI.includes(email) ? 'Heidi' : name;
   const isHeidi = ALL_HEIDI.includes(email);
 
-  // Log in control center
-  if (!isHeidi) logAccessRequest(email, displayName);
-  else logLoginEvent(email, 'request');
+  // Heidi's own emails — send magic link directly, no approval step needed
+  if (isHeidi) {
+    logLoginEvent(email, 'request');
+    const { error } = await sb.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: window.location.href }
+    });
+    if (error) {
+      msg.textContent = 'Error: ' + error.message;
+      btn.disabled = false;
+      btn.textContent = 'Sign in';
+    } else {
+      msg.innerHTML = '✓ Magic link sent<br><span style="color:#aaa;font-size:11px">Check ' + email + ' and click the link</span>';
+      btn.textContent = 'Check your email';
+    }
+    return;
+  }
 
+  // External user — send approval request via EmailJS (requires EmailJS config)
+  const displayName = name;
+  logAccessRequest(email, displayName);
   try {
     await emailjs.init(EMAILJS_KEY);
     await emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, {
       to_email:    HEIDI_PRIMARY,
       from_name:   displayName,
       from_email:  email,
-      is_heidi:    isHeidi ? 'yes' : 'no',
-      approve_url: `${window.location.origin}${window.location.pathname}?approve=${encodeURIComponent(email)}&name=${encodeURIComponent(displayName)}`,
+      is_heidi:    'no',
+      approve_url: window.location.origin + window.location.pathname + '?approve=' + encodeURIComponent(email) + '&name=' + encodeURIComponent(displayName),
       site_url:    window.location.href,
     });
   } catch(err) {
     console.warn('EmailJS error:', err);
-    // If EmailJS not configured yet, fall through gracefully
   }
 
-  msg.innerHTML = isHeidi
-    ? '✓ Permission request sent to heidinicolecruztang@gmail.com<br><span style="color:#aaa;font-size:11px">Check your email to approve</span>'
-    : `✓ Access request sent — Heidi will approve shortly<br><span style="color:#aaa;font-size:11px">Check your email once approved</span>`;
+  msg.innerHTML = '✓ Access request sent — Heidi will approve shortly<br><span style="color:#aaa;font-size:11px">Check your email once approved</span>';
   btn.textContent = 'Awaiting approval...';
 }
 
