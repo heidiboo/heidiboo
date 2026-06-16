@@ -230,6 +230,16 @@
     font-size: 10px; color: rgba(255,255,255,0.3);
     font-family: var(--sans);
   }
+  .sync-badge {
+    font-size: 10px; font-family: var(--mono); letter-spacing: 0.04em;
+    padding: 3px 8px; border-radius: 20px; transition: all 0.3s;
+    white-space: nowrap;
+  }
+  .sync-badge--idle  { color: rgba(255,255,255,0.25); background: transparent; }
+  .sync-badge--busy  { color: rgba(255,200,80,0.7);   background: rgba(255,200,80,0.08); }
+  .sync-badge--ok    { color: rgba(120,220,120,0.6);   background: transparent; }
+  .sync-badge--error { color: #ff8a65; background: rgba(255,138,101,0.12);
+                       border: 1px solid rgba(255,138,101,0.3); font-weight:600; }
 
   /* Work hero strip */
   .work-hero {
@@ -1258,6 +1268,7 @@
         <div class="mode-pill-opt" onclick="setMode('focus')" style="color:rgba(255,255,255,0.4)">Focus</div>
         <div class="mode-pill-opt active" onclick="setMode('work')" style="background:rgba(255,255,255,0.15);color:#F9F7F3">Work</div>
       </div>
+      <div id="sync-badge" class="sync-badge sync-badge--idle">• waiting</div>
       <div class="date-badge" id="today-date"></div>
       <!-- Control center — only shown to primary email -->
       <button id="cc-btn" onclick="openControlCenter()" style="display:none;background:none;border:none;cursor:pointer;color:rgba(255,255,255,0.5);font-size:16px;padding:4px 6px;border-radius:6px;transition:all 0.15s;line-height:1" title="Control Center" onmouseover="this.style.color='#fff';this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.color='rgba(255,255,255,0.5)';this.style.background='none'">⚙</button>
@@ -1964,6 +1975,52 @@ const _supaQueueBulk  = {}; // everything else — bulk arrays, flush slower
 let _supaFlushTimerIndiv = null;
 let _supaFlushTimerBulk  = null;
 
+// ── Sync state — drives the always-visible badge in the header ──
+let _syncPending   = 0;     // items queued but not yet written to Supabase
+let _syncLastOk    = null;  // Date of last successful write
+let _syncHadError  = false; // true if the last flush attempt had any failure
+let _syncBadgeTimer = null; // interval that refreshes the "saved Xm ago" text
+
+function _updateSyncBadge() {
+  const el = document.getElementById('sync-badge');
+  if (!el) return;
+  if (_syncPending > 0) {
+    el.textContent = 'syncing…';
+    el.className = 'sync-badge sync-badge--busy';
+    el.onclick = null;
+    el.style.cursor = 'default';
+  } else if (_syncHadError) {
+    el.textContent = '⚠ not saved · save now';
+    el.className = 'sync-badge sync-badge--error';
+    el.onclick = forceSyncNow;
+    el.style.cursor = 'pointer';
+  } else if (_syncLastOk) {
+    const diffS = Math.round((Date.now() - _syncLastOk) / 1000);
+    const ago = diffS < 10 ? 'just now' :
+                diffS < 60 ? diffS + 's ago' :
+                Math.round(diffS/60) + 'm ago';
+    el.textContent = '✓ saved ' + ago;
+    el.className = 'sync-badge sync-badge--ok';
+    el.onclick = null;
+    el.style.cursor = 'default';
+  } else {
+    el.textContent = '• waiting';
+    el.className = 'sync-badge sync-badge--idle';
+    el.onclick = null;
+    el.style.cursor = 'default';
+  }
+}
+
+async function forceSyncNow() {
+  clearTimeout(_supaFlushTimerIndiv); clearTimeout(_supaFlushTimerBulk);
+  _supaFlushTimerIndiv = null; _supaFlushTimerBulk = null;
+  const entries = [...Object.entries(_supaQueueIndiv), ...Object.entries(_supaQueueBulk)];
+  for (const k in _supaQueueIndiv) delete _supaQueueIndiv[k];
+  for (const k in _supaQueueBulk)  delete _supaQueueBulk[k];
+  if (!entries.length) return;
+  await _supaDoFlush(entries);
+}
+
 // flushNow — immediate fire-and-forget write, no timer, no queue.
 // Use for discrete high-value user actions (add note, check task) where
 // a timer delay means data loss if the tab closes before it fires.
@@ -1981,34 +2038,37 @@ function flushNow(key, val) {
 }
 
 async function _supaDoFlush(entries) {
+  let hadError = false;
   for (const [k, v] of entries) {
+    let ok = false;
     if (k.startsWith('doc_') && k.length > 10 && !SUPA_MAP[k]) {
-      try { await sb.from('docs').upsert({ id: k, data: v }, { onConflict: 'id' }); }
+      try { await sb.from('docs').upsert({ id: k, data: v }, { onConflict: 'id' }); ok = true; }
       catch(e) { console.warn('supa doc:', k, e.message); }
-      continue;
-    }
-    if (k.startsWith('taskday_') && !SUPA_MAP[k]) {
-      try { await sb.from('tasks').upsert({ id: k, date: k, data: v }, { onConflict: 'id' }); }
+    } else if (k.startsWith('taskday_') && !SUPA_MAP[k]) {
+      try { await sb.from('tasks').upsert({ id: k, date: k, data: v }, { onConflict: 'id' }); ok = true; }
       catch(e) { console.warn('supa taskday:', k, e.message); }
-      continue;
-    }
-    if (k.startsWith('proj_') && !SUPA_MAP[k]) {
-      try { await sb.from('projects').upsert({ id: k, data: v }, { onConflict: 'id' }); }
+    } else if (k.startsWith('proj_') && !SUPA_MAP[k]) {
+      try { await sb.from('projects').upsert({ id: k, data: v }, { onConflict: 'id' }); ok = true; }
       catch(e) { console.warn('supa proj:', k, e.message); }
-      continue;
+    } else {
+      const mp = SUPA_MAP[k]; if (!mp) { _syncPending = Math.max(0, _syncPending - 1); continue; }
+      try {
+        await sb.from(mp.table).upsert(
+          mp.table === 'tasks'    ? { id: mp.id, date: k, data: v } :
+          mp.table === 'docs'     ? { id: mp.id, data: v } :
+          mp.table === 'projects' ? { id: mp.id, data: v } :
+                                    { key: mp.id, value: v },
+          { onConflict: mp.table === 'settings' ? 'key' : 'id' }
+        );
+        ok = true;
+      } catch(e) { console.warn('supa bulk:', k, e.message); }
     }
-    const mp = SUPA_MAP[k]; if (!mp) continue;
-    try {
-      await sb.from(mp.table).upsert(
-        mp.table === 'tasks'    ? { id: mp.id, date: k, data: v } :
-        mp.table === 'docs'     ? { id: mp.id, data: v } :
-        mp.table === 'projects' ? { id: mp.id, data: v } :
-        mp.table === 'schedule' ? { week_key: mp.id, data: v } :
-                                  { key: mp.id, value: v },
-        { onConflict: mp.table === 'schedule' ? 'week_key' : mp.table === 'settings' ? 'key' : 'id' }
-      );
-    } catch(e) { console.warn('supa bulk:', k, e.message); }
+    if (ok) { _syncLastOk = Date.now(); } else { hadError = true; }
+    _syncPending = Math.max(0, _syncPending - 1);
+    _updateSyncBadge();
   }
+  if (hadError) _syncHadError = true;
+  _updateSyncBadge();
 }
 
 function syncToSupabase(key, val) {
@@ -2020,8 +2080,9 @@ function syncToSupabase(key, val) {
 
   const isIndiv = isIndivDoc || isIndivTaskDay || isIndivProj;
   if (isIndiv) {
-    // Individual rows: dedicated 500ms timer — never delayed by bulk syncs
+    if (!_supaQueueIndiv[key]) { _syncPending++; _syncHadError = false; }
     _supaQueueIndiv[key] = val;
+    _updateSyncBadge();
     clearTimeout(_supaFlushTimerIndiv);
     _supaFlushTimerIndiv = setTimeout(async () => {
       _supaFlushTimerIndiv = null;
@@ -2030,8 +2091,9 @@ function syncToSupabase(key, val) {
       await _supaDoFlush(entries);
     }, 500);
   } else {
-    // Bulk arrays: separate 8s timer — doesn't interfere with individual rows
+    if (!_supaQueueBulk[key]) { _syncPending++; _syncHadError = false; }
     _supaQueueBulk[key] = val;
+    _updateSyncBadge();
     clearTimeout(_supaFlushTimerBulk);
     _supaFlushTimerBulk = setTimeout(async () => {
       _supaFlushTimerBulk = null;
@@ -2046,7 +2108,7 @@ function syncToSupabase(key, val) {
 // keepalive fetch completes even after the page unloads.
 // Individual rows are small — they reliably fit the 64KB keepalive limit.
 let _supaAccessToken = null; // kept fresh by onAuthStateChange (SIGNED_IN + TOKEN_REFRESHED)
-window.addEventListener('beforeunload', () => {
+window.addEventListener('beforeunload', (e) => {
   clearTimeout(_supaFlushTimerIndiv); clearTimeout(_supaFlushTimerBulk);
   _supaFlushTimerIndiv = null; _supaFlushTimerBulk = null;
   // Drain both queues — individual first (most critical)
@@ -2054,6 +2116,8 @@ window.addEventListener('beforeunload', () => {
   for (const k in _supaQueueIndiv) delete _supaQueueIndiv[k];
   for (const k in _supaQueueBulk)  delete _supaQueueBulk[k];
   if (!entries.length) return;
+  // Warn the user — browser will show a generic "Leave site?" dialog
+  e.preventDefault(); e.returnValue = '';
   const token = _supaAccessToken || SUPA_KEY;
   entries.forEach(([k, v]) => {
     let table, row, onConflict;
@@ -3135,38 +3199,30 @@ async function showApp(offlineMode) {
     topbar.appendChild(btn);
   }
 
+  // Start the badge refresh ticker (updates "saved Xm ago" text every 30s)
+  clearInterval(_syncBadgeTimer);
+  _syncBadgeTimer = setInterval(_updateSyncBadge, 30000);
+  _updateSyncBadge();
+
   if (!offlineMode) {
     // Background sync — loads Supabase, merges into localStorage, re-renders UI
-    showSyncStatus('Syncing...');
+    _syncPending++; _updateSyncBadge();
     loadFromSupabase()
       .then(() => {
-        loadAll();    // re-read merged localStorage into in-memory vars
-        renderAll();  // re-render UI with fresh data
+        loadAll();
+        renderAll();
         if (_currentProjectIdx >= 0) renderProjectDetail();
-        hideSyncStatus();
+        _syncLastOk = Date.now(); _syncPending = Math.max(0, _syncPending - 1); _updateSyncBadge();
       })
       .catch(e => {
         console.warn('Supabase sync failed, using local data:', e);
-        hideSyncStatus();
+        _syncHadError = true; _syncPending = Math.max(0, _syncPending - 1); _updateSyncBadge();
       });
   }
 }
 
-function showSyncStatus(msg) {
-  let el = document.getElementById('sync-status');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'sync-status';
-    el.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#1A1A1A;color:#F9F7F3;padding:8px 16px;border-radius:8px;font-size:11px;font-family:var(--mono);z-index:9998;letter-spacing:0.06em';
-    document.body.appendChild(el);
-  }
-  el.textContent = msg;
-  el.style.display = 'block';
-}
-function hideSyncStatus() {
-  const el = document.getElementById('sync-status');
-  if (el) el.style.display = 'none';
-}
+function showSyncStatus() { _updateSyncBadge(); }
+function hideSyncStatus() { _updateSyncBadge(); }
 
 // ---- STATE ----
 let projects = [], workGoals = [], personalGoals = [], cases = [], skills = [], notes = [], todos = [], docs = [], taskDays = [], docFolders = [], trashedDocs = [], lockedDocs = [], trashedFolders = [], trashedProjects = [], globalReminders = [];
