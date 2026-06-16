@@ -2969,12 +2969,10 @@ function onLoginEmailInput(val) {
   const nameWrap = document.getElementById('login-name-wrap');
   const pwWrap   = document.getElementById('login-pw-wrap');
   const btn      = document.getElementById('login-btn');
-  const isOwner  = email === HEIDI_PRIMARY;
-  // Show name field only for emails not in Heidi's list
   const needsName = email && !ALL_HEIDI.includes(email);
   nameWrap.style.display = needsName ? 'flex' : 'none';
-  pwWrap.style.display   = isOwner ? 'flex' : 'none';
-  btn.textContent        = isOwner ? 'Sign in' : 'Request access';
+  if (pwWrap) pwWrap.style.display = 'none';
+  btn.textContent = ALL_HEIDI.includes(email) ? 'Sign in' : 'Request access';
 }
 
 async function requestAccess() {
@@ -2984,26 +2982,6 @@ async function requestAccess() {
   const btn   = document.getElementById('login-btn');
 
   if (!email) { msg.textContent = 'Enter your email first'; return; }
-
-  // Owner: password login — no email needed
-  if (email === HEIDI_PRIMARY) {
-    const password = document.getElementById('login-password')?.value || '';
-    if (!password) {
-      msg.textContent = 'Enter your password';
-      document.getElementById('login-password').focus();
-      return;
-    }
-    btn.disabled = true;
-    btn.textContent = 'Signing in...';
-    msg.textContent = '';
-    const { error } = await sb.auth.signInWithPassword({ email, password });
-    if (error) {
-      msg.textContent = error.message;
-      btn.disabled = false;
-      btn.textContent = 'Sign in';
-    }
-    return;
-  }
 
   // Unknown email must provide their name
   if (!ALL_HEIDI.includes(email) && !name) {
