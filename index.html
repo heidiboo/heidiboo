@@ -2971,8 +2971,17 @@ function onLoginEmailInput(val) {
   const btn      = document.getElementById('login-btn');
   const needsName = email && !ALL_HEIDI.includes(email);
   nameWrap.style.display = needsName ? 'flex' : 'none';
-  if (pwWrap) pwWrap.style.display = 'none';
+  if (pwWrap) pwWrap.style.display = ALL_HEIDI.includes(email) ? 'flex' : 'none';
   btn.textContent = ALL_HEIDI.includes(email) ? 'Sign in' : 'Request access';
+}
+
+async function resetPassword() {
+  const email = document.getElementById('login-email').value.trim().toLowerCase();
+  const msg   = document.getElementById('login-msg');
+  if (!email) { msg.textContent = 'Enter your email first'; return; }
+  msg.textContent = 'Sending reset link...';
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.href });
+  msg.textContent = error ? 'Error: ' + error.message : '✓ Reset link sent — check your email';
 }
 
 async function requestAccess() {
@@ -2990,25 +2999,36 @@ async function requestAccess() {
     return;
   }
 
-  btn.disabled = true;
-  btn.textContent = 'Sending...';
-  msg.textContent = '';
-
   const isHeidi = ALL_HEIDI.includes(email);
 
-  // Heidi's own emails — send magic link directly, no approval step needed
   if (isHeidi) {
+    const password = document.getElementById('login-password')?.value || '';
+    // Try password if provided, otherwise send magic link
+    if (password) {
+      btn.disabled = true;
+      btn.textContent = 'Signing in...';
+      msg.textContent = '';
+      logLoginEvent(email, 'request');
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) {
+        msg.innerHTML = error.message + '<br><span style="font-size:11px;color:#aaa">Forgot your password? <a href="#" onclick="resetPassword();return false;" style="color:#aaa">Send reset link</a></span>';
+        btn.disabled = false;
+        btn.textContent = 'Sign in';
+      }
+      return;
+    }
+    // No password — send magic link
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
+    msg.textContent = '';
     logLoginEvent(email, 'request');
-    const { error } = await sb.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: window.location.href }
-    });
+    const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.href } });
     if (error) {
       msg.textContent = 'Error: ' + error.message;
       btn.disabled = false;
       btn.textContent = 'Sign in';
     } else {
-      msg.innerHTML = '✓ Magic link sent<br><span style="color:#aaa;font-size:11px">Check ' + email + ' and click the link</span>';
+      msg.innerHTML = '✓ Magic link sent — check your email<br><span style="font-size:11px;color:#aaa">Or enter your password above to sign in directly</span>';
       btn.textContent = 'Check your email';
     }
     return;
