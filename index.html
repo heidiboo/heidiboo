@@ -1872,6 +1872,10 @@ function saveLocal(key, val) {
 }
 function loadLocal(key, def) { try { return JSON.parse(localStorage.getItem('dash_'+key)) ?? def; } catch { return def; } }
 
+function escHtml(str) {
+  return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
 let _storageWarnTimer = null;
 function _clearLocalCache() {
   const keysToRemove = Object.keys(localStorage).filter(k => k.startsWith('dash_'));
