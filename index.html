@@ -1840,6 +1840,13 @@ try {
 
 // localStorage still used as fast local cache + offline fallback
 function saveLocal(key, val) {
+  // Always strip base64 images from docs before caching locally — they're large and already in Supabase
+  if (key === 'docs' && Array.isArray(val)) {
+    val = val.map(d => {
+      if (!d?.body?.includes('data:image')) return d;
+      return { ...d, body: d.body.replace(/<img[^>]+data:image[^>]+>/gi, '<p>[image — open doc to reload]</p>') };
+    });
+  }
   const serialized = JSON.stringify(val);
   try {
     localStorage.setItem('dash_'+key, serialized);
