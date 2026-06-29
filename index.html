@@ -3475,7 +3475,11 @@ function renderProjects() {
   // Sort: most recently opened first, then by creation order for unopened projects
   const sorted = projects
     .map((p, i) => ({ p, i }))
-    .sort((a, b) => (b.p.lastOpened || 0) - (a.p.lastOpened || 0));
+    .sort((a, b) => {
+      const aTime = a.p.lastOpened || new Date(a.p.createdAt || 0).getTime();
+      const bTime = b.p.lastOpened || new Date(b.p.createdAt || 0).getTime();
+      return bTime - aTime;
+    });
   tbody.innerHTML = sorted.map(({ p, i }) => {
     return `<tr class="proj-row-click" onclick="openProject(${i})">
       <td><div class="project-name">${escHtml(p.name)}<small>${escHtml(p.team || '')}</small></div></td>
