@@ -587,6 +587,14 @@
   .pomo-btn.active { background: var(--ink); color: #F9F7F3; border-color: var(--ink); }
   .pomo-sessions { font-size: 10px; color: var(--ink3); font-family: var(--mono); }
 
+  /* Breathing wave canvas */
+  .focus-wave-wrap {
+    position: relative; width: 100%; height: 26vh;
+    border-bottom: 1px solid var(--border);
+    overflow: hidden; flex-shrink: 0;
+  }
+  #flow-canvas { display: block; width: 100%; height: 100%; pointer-events: none; }
+
   /* Breathing guide text — fades in/out with the wave */
   .focus-breathe-label {
     position: absolute; bottom: 12px; left: 50%;
@@ -1172,6 +1180,7 @@
 
     <!-- Breathing wave — top 1/4 of page -->
     <div class="focus-wave-wrap">
+      <canvas id="flow-canvas"></canvas>
       <div class="focus-breathe-label" id="focus-breathe-label">breathe</div>
       <!-- Soot sprite celebration — sits inside wave zone -->
       <canvas id="soot-canvas" style="display:none;position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:10"></canvas>
@@ -8013,12 +8022,74 @@ function startCrabCelebration() {
   requestAnimationFrame(loop);
 }
 
+// ---- FLOW CANVAS (breathing wave) ----
+function initFlowCanvas(canvasId, numLines) {
+  const c = document.getElementById(canvasId);
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  function resize() {
+    const w = c.offsetWidth || c.parentElement?.offsetWidth || window.innerWidth;
+    const h = c.offsetHeight || c.parentElement?.offsetHeight || Math.round(window.innerHeight * 0.26);
+    const dpr = window.devicePixelRatio || 1;
+    if (c.width !== w * dpr || c.height !== h * dpr) {
+      c.width = w * dpr; c.height = h * dpr;
+      ctx.setTransform(1,0,0,1,0,0); ctx.scale(dpr, dpr);
+    }
+  }
+  resize();
+  window.addEventListener('resize', resize);
+  const W = () => c.offsetWidth || window.innerWidth;
+  const H = () => c.offsetHeight || Math.round(window.innerHeight * 0.26);
+  const INHALE=4000, HOLD1=1000, EXHALE=4000, HOLD2=1000, CYCLE=10000;
+  const wlines = Array.from({length: numLines}, (_,i) => ({
+    yFrac: 0.2 + i * (0.62 / Math.max(numLines-1,1)),
+    amp: 8 + i*2.5, freq: 0.003 + i*0.0007,
+    alpha: 0.02 + i*0.012, width: 0.4 + i*0.15, phaseOffset: i*0.35,
+  }));
+  const breatheEl = document.getElementById('focus-breathe-label');
+  let startTs = null;
+  function draw(ts) {
+    if (!startTs) startTs = ts;
+    const elapsed = (ts - startTs) % CYCLE;
+    resize();
+    ctx.clearRect(0, 0, W(), H());
+    let env, phase;
+    if (elapsed < INHALE)                          { env = elapsed/INHALE; phase='inhale'; }
+    else if (elapsed < INHALE+HOLD1)               { env = 1; phase='hold'; }
+    else if (elapsed < INHALE+HOLD1+EXHALE)        { env = 1-(elapsed-INHALE-HOLD1)/EXHALE; phase='exhale'; }
+    else                                           { env = 0; phase='hold'; }
+    const breathEnv = 0.25 + 0.75*(0.5 - 0.5*Math.cos(env*Math.PI));
+    const tSec = (ts - startTs) / 1000;
+    if (breatheEl) {
+      breatheEl.textContent = ({inhale:'inhale',hold:'hold',exhale:'exhale'})[phase];
+      breatheEl.style.opacity = phase==='hold' ? '0.12' : String(0.1 + breathEnv*0.25);
+    }
+    wlines.forEach(l => {
+      ctx.beginPath();
+      const baseY = H() * l.yFrac;
+      const amp = l.amp * breathEnv;
+      for (let x=0; x<=W(); x+=3) {
+        const y = baseY
+          + Math.sin(x*l.freq + tSec*0.18 + l.phaseOffset)*amp
+          + Math.sin(x*l.freq*0.45 + tSec*0.11 + l.phaseOffset*1.8)*amp*0.25;
+        x===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+      }
+      ctx.strokeStyle = `rgba(0,0,0,${l.alpha*breathEnv+0.01})`;
+      ctx.lineWidth = l.width;
+      ctx.stroke();
+    });
+    requestAnimationFrame(draw);
+  }
+  requestAnimationFrame(draw);
+}
+
 // ---- INIT ----
 function init() {
   initDate();
   loadAll();
   renderAll();
   initMode();
+  initFlowCanvas('flow-canvas', 8);
   pomoRender();
   renderFinances();
 }
