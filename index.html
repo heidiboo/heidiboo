@@ -1880,9 +1880,15 @@ function saveLocal(key, val) {
           return;
         } catch(_) {}
       }
-      // Last resort: retry with same data (may fail again, but at least it tried)
-      try { localStorage.setItem('dash_'+key, serialized); } catch(_) {
-        _showStorageWarning('Browser storage is full. Open the backup panel (⚙) and download a backup.');
+      // Last resort: clear entire local cache — Supabase is the source of truth
+      try {
+        Object.keys(localStorage).filter(k => k.startsWith('dash_')).forEach(k => {
+          try { localStorage.removeItem(k); } catch(_) {}
+        });
+        localStorage.setItem('dash_'+key, serialized);
+      } catch(_) {
+        // localStorage completely unusable — that's fine, Supabase has everything
+        console.warn('[storage] localStorage unusable for', key, '— Supabase will persist it');
       }
     }
   }
@@ -1991,11 +1997,16 @@ const SUPA_MAP = {
   docs:            { table:'docs',     id:'docs' },
   docFolders:      { table:'docs',     id:'docFolders' },
   trashedDocs:     { table:'docs',     id:'trashedDocs' },
+  lockedDocs:      { table:'docs',     id:'lockedDocs' },
+  trashedFolders:  { table:'docs',     id:'trashedFolders' },
   projects:        { table:'projects', id:'projects' },
   workGoals:       { table:'settings', id:'workGoals' },
   personalGoals:   { table:'settings', id:'personalGoals' },
   notes:           { table:'settings', id:'notes' },
   skills:          { table:'settings', id:'skills' },
+  cases:           { table:'settings', id:'cases' },
+  globalReminders: { table:'settings', id:'globalReminders' },
+  trashedProjects: { table:'settings', id:'trashedProjects' },
   pomoSessions:    { table:'settings', id:'pomoSessions' },
   pomoDate:        { table:'settings', id:'pomoDate' },
   financeLinks:    { table:'settings', id:'financeLinks' },
