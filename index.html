@@ -7054,9 +7054,9 @@ let _currentProjectIdx = -1;
 function openProject(i) {
   _currentProjectIdx = i;
   const p = projects[i];
-  p.lastOpened = Date.now();           // track for sorting
-  p._updatedTs = p._updatedTs || Date.now();
-  saveLocal('projects', projects);     // persist sort order instantly (no Supabase write needed)
+  p.lastOpened = Date.now();
+  p._updatedTs = Date.now(); // always stamp so Supabase sync triggers
+  save('projects', projects); // persist sort order to Supabase
   document.getElementById('proj-list-view').style.display = 'none';
   document.getElementById('proj-detail-view').style.display = 'block';
   renderProjectDetail();
