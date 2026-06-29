@@ -3818,6 +3818,14 @@ function todoLabelKey(e, id, listId) {
   if (e.key === 'Escape') e.currentTarget.blur();
 }
 
+function sortTasksInDay(day) {
+  if (!day?.tasks) return;
+  day.tasks.sort((a, b) => {
+    if (a.done === b.done) return 0;
+    return a.done ? 1 : -1; // done tasks sink to bottom
+  });
+}
+
 function toggleTodoById(id) {
   const day = getTodayCard();
   const t = day.tasks.find(t => t.id === id);
