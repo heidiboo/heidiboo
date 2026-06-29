@@ -2085,7 +2085,7 @@ async function _supaDoFlush(entries) {
         ok = true;
       } catch(e) { console.warn('supa bulk:', k, e.message); }
     }
-    if (ok) { _syncLastOk = Date.now(); } else { hadError = true; }
+    if (ok) { _syncLastOk = Date.now(); _realtimeIgnoreUntil = Date.now() + 2000; } else { hadError = true; }
     _syncPending = Math.max(0, _syncPending - 1);
     _updateSyncBadge();
   }
@@ -3245,6 +3245,7 @@ async function showApp(offlineMode) {
         renderAll();
         if (_currentProjectIdx >= 0) renderProjectDetail();
         _syncLastOk = Date.now(); _syncPending = Math.max(0, _syncPending - 1); _updateSyncBadge();
+        startRealtimeSync();
       })
       .catch(e => {
         console.warn('Supabase sync failed, using local data:', e);
@@ -3255,6 +3256,34 @@ async function showApp(offlineMode) {
 
 function showSyncStatus() { _updateSyncBadge(); }
 function hideSyncStatus() { _updateSyncBadge(); }
+
+// ── Real-time sync: push Supabase changes to all open tabs/devices instantly ──
+let _realtimeChannel = null;
+let _realtimeRenderTimer = null;
+let _realtimeIgnoreUntil = 0; // suppress echoes of our own writes for 2s
+
+function startRealtimeSync() {
+  if (_realtimeChannel) { try { sb.removeChannel(_realtimeChannel); } catch(_) {} }
+  _realtimeChannel = sb.channel('db-realtime')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' },    _onRemoteChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'docs' },     _onRemoteChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, _onRemoteChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'settings' }, _onRemoteChange)
+    .subscribe();
+}
+
+function _onRemoteChange() {
+  if (Date.now() < _realtimeIgnoreUntil) return; // ignore echo of our own save
+  clearTimeout(_realtimeRenderTimer);
+  _realtimeRenderTimer = setTimeout(async () => {
+    try {
+      await loadFromSupabase();
+      loadAll();
+      renderAll();
+      if (_currentProjectIdx >= 0) renderProjectDetail();
+    } catch(e) { console.warn('[realtime] re-sync failed:', e); }
+  }, 800);
+}
 
 // ---- STATE ----
 let projects = [], workGoals = [], personalGoals = [], cases = [], skills = [], notes = [], todos = [], docs = [], taskDays = [], docFolders = [], trashedDocs = [], lockedDocs = [], trashedFolders = [], trashedProjects = [], globalReminders = [];
