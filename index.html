@@ -3443,7 +3443,6 @@ function loadAll() {
     if (cleaned) save('taskDays', taskDays);
     save('cleaned_empty_rolled_v1', true);
   }
-  rolloverTasks();
 }
 
 // ---- RENDER ----
@@ -4061,7 +4060,10 @@ function todayKey() {
   return new Date().toISOString().slice(0,10); // YYYY-MM-DD
 }
 
+let _rolloverDone = false;
 function rolloverTasks() {
+  if (_rolloverDone) return; // only ever runs once per page session
+  _rolloverDone = true;
   const today = todayKey();
   // Ensure today's day card exists
   if (!taskDays.find(d => d.date === today)) {
@@ -8255,6 +8257,7 @@ function initFlowCanvas(canvasId, numLines) {
 function init() {
   initDate();
   loadAll();
+  rolloverTasks();
   renderAll();
   initMode();
   initFlowCanvas('flow-canvas', 8);
