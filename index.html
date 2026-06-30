@@ -1849,17 +1849,24 @@ try {
 }
 
 // localStorage still used as fast local cache + offline fallback
-function _stripImagesFromDocArray(arr) {
-  return arr.map(d => {
-    if (!d?.body?.includes('data:image')) return d;
-    return { ...d, body: d.body.replace(/<img[^>]+data:image[^>]+>/gi, '<p>[image — open doc to reload]</p>') };
-  });
+// Recursively strip base64 image data from any string field, anywhere in the value —
+// docs, trashedDocs, lockedDocs, task notes, action logs, etc. all funnel through this.
+function _stripImagesDeep(val) {
+  if (typeof val === 'string') {
+    if (!val.includes('data:image')) return val;
+    return val.replace(/<img[^>]+data:image[^>]+>/gi, '<p>[image — open doc to reload]</p>');
+  }
+  if (Array.isArray(val)) return val.map(_stripImagesDeep);
+  if (val && typeof val === 'object') {
+    const out = {};
+    for (const k in val) out[k] = _stripImagesDeep(val[k]);
+    return out;
+  }
+  return val;
 }
 function saveLocal(key, val) {
   // Always strip base64 images before caching locally — they're large and already in Supabase
-  if (['docs','trashedDocs','lockedDocs'].includes(key) && Array.isArray(val)) {
-    val = _stripImagesFromDocArray(val);
-  }
+  val = _stripImagesDeep(val);
   const serialized = JSON.stringify(val);
   try {
     localStorage.setItem('dash_'+key, serialized);
@@ -1871,15 +1878,21 @@ function saveLocal(key, val) {
         const td = JSON.parse(localStorage.getItem('dash_taskDays') || '[]');
         if (td.length > 60) localStorage.setItem('dash_taskDays', JSON.stringify(td.slice(0, 60)));
       } catch(_) {}
-      // Last resort: clear entire local cache — Supabase is the source of truth
+      // Last resort: clear entire local cache and immediately re-pull from Supabase
+      // so the UI never sits showing a near-empty cache waiting on a manual recovery click.
       try {
         Object.keys(localStorage).filter(k => k.startsWith('dash_')).forEach(k => {
           try { localStorage.removeItem(k); } catch(_) {}
         });
         localStorage.setItem('dash_'+key, serialized);
       } catch(_) {
-        // localStorage completely unusable — that's fine, Supabase has everything
         console.warn('[storage] localStorage unusable for', key, '— Supabase will persist it');
+      }
+      if (typeof loadFromSupabase === 'function') {
+        loadFromSupabase().then(() => {
+          if (typeof loadAll === 'function') loadAll();
+          if (typeof renderAll === 'function') renderAll();
+        }).catch(e => console.warn('[storage] auto-recovery sync failed:', e));
       }
     }
   }
@@ -2425,21 +2438,21 @@ function openDocsRecovery() {
   }
 }
 
-// Free up local storage: strip base64 images from doc bodies, trim old task days
+// Free up local storage: strip base64 images from every cached key, trim old task days
 function drClearOldStorage() {
   let freed = 0;
-  // Strip base64 images from docs, trashedDocs, and lockedDocs in localStorage
-  ['docs','trashedDocs','lockedDocs'].forEach(key => {
+  // Strip base64 images from every dash_ key in localStorage, not just known doc arrays
+  Object.keys(localStorage).filter(k => k.startsWith('dash_')).forEach(storageKey => {
     try {
-      const raw = JSON.parse(localStorage.getItem('dash_'+key) || '[]');
-      const stripped = raw.map(d => {
-        if (!d?.body?.includes('data:image')) return d;
-        const before = d.body.length;
-        const newBody = d.body.replace(/<img[^>]+data:image[^>]+>/gi, '<p>[image — open doc to reload]</p>');
-        freed += before - newBody.length;
-        return { ...d, body: newBody };
-      });
-      localStorage.setItem('dash_'+key, JSON.stringify(stripped));
+      const raw = localStorage.getItem(storageKey);
+      if (!raw || !raw.includes('data:image')) return;
+      const before = raw.length;
+      const parsed = JSON.parse(raw);
+      const stripped = _stripImagesDeep(parsed);
+      const newRaw = JSON.stringify(stripped);
+      freed += before - newRaw.length;
+      localStorage.setItem(storageKey, newRaw);
+      const key = storageKey.replace(/^dash_/, '');
       if (key === 'docs') docs = stripped; // update in-memory too
     } catch(e) {}
   });
