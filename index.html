@@ -3891,7 +3891,7 @@ function toggleAddProject() {
 function addProject() {
   const name = document.getElementById('proj-name').value.trim();
   if (!name) return;
-  projects.push({
+  const newProj = {
     id: 'proj_' + Date.now(),
     name,
     team: document.getElementById('proj-team').value,
@@ -3901,8 +3901,11 @@ function addProject() {
     progress: parseInt(document.getElementById('proj-progress').value) || 0,
     due: document.getElementById('proj-due').value,
     createdAt: new Date().toISOString(),
-  });
+    _updatedTs: Date.now(),
+  };
+  projects.push(newProj);
   save('projects', projects);
+  flushNow(newProj.id, newProj); // write to Supabase immediately
   document.getElementById('proj-name').value = '';
   document.getElementById('proj-team').value = '';
   // hide form
@@ -5101,6 +5104,7 @@ function openDoc(id, projectName) {
     const newDoc = { id: newId, title: '', body: '', project: projectName || '', folder: autoFolder, updatedAt: now, createdAt: now, updatedTs: Date.now(), tags: [], cover: '' };
     docs.push(newDoc);
     save('docs', docs);
+    flushNow(newId, newDoc); // write to Supabase immediately — don't wait on the bulk timer
     renderDocs();
     currentDocId = newId;
     document.getElementById('doc-title-input').value = '';
@@ -5148,7 +5152,7 @@ function autoSaveDoc() {
 }
 
 function closeDoc() {
-  autoSaveDoc(); // save on close too
+  try { autoSaveDoc(); } catch(e) { console.error('[closeDoc] autosave failed, closing anyway:', e); }
   document.getElementById('doc-modal').style.display = 'none';
   document.body.style.overflow = '';
   hideSlashMenu();
