@@ -1849,13 +1849,16 @@ try {
 }
 
 // localStorage still used as fast local cache + offline fallback
+function _stripImagesFromDocArray(arr) {
+  return arr.map(d => {
+    if (!d?.body?.includes('data:image')) return d;
+    return { ...d, body: d.body.replace(/<img[^>]+data:image[^>]+>/gi, '<p>[image — open doc to reload]</p>') };
+  });
+}
 function saveLocal(key, val) {
-  // Always strip base64 images from docs before caching locally — they're large and already in Supabase
-  if (key === 'docs' && Array.isArray(val)) {
-    val = val.map(d => {
-      if (!d?.body?.includes('data:image')) return d;
-      return { ...d, body: d.body.replace(/<img[^>]+data:image[^>]+>/gi, '<p>[image — open doc to reload]</p>') };
-    });
+  // Always strip base64 images before caching locally — they're large and already in Supabase
+  if (['docs','trashedDocs','lockedDocs'].includes(key) && Array.isArray(val)) {
+    val = _stripImagesFromDocArray(val);
   }
   const serialized = JSON.stringify(val);
   try {
@@ -1868,18 +1871,6 @@ function saveLocal(key, val) {
         const td = JSON.parse(localStorage.getItem('dash_taskDays') || '[]');
         if (td.length > 60) localStorage.setItem('dash_taskDays', JSON.stringify(td.slice(0, 60)));
       } catch(_) {}
-      // For docs: strip base64 images from bodies — they're large and already in Supabase
-      if (key === 'docs' && Array.isArray(val)) {
-        try {
-          const stripped = val.map(d => {
-            if (!d?.body?.includes('data:image')) return d;
-            return { ...d, body: d.body.replace(/<img[^>]+data:image[^>]+>/gi, '<p>[image — open doc to reload]</p>') };
-          });
-          localStorage.setItem('dash_'+key, JSON.stringify(stripped));
-          _showStorageWarning('Images stripped from local cache to free space. Your docs are safe in Supabase.');
-          return;
-        } catch(_) {}
-      }
       // Last resort: clear entire local cache — Supabase is the source of truth
       try {
         Object.keys(localStorage).filter(k => k.startsWith('dash_')).forEach(k => {
@@ -2437,19 +2428,21 @@ function openDocsRecovery() {
 // Free up local storage: strip base64 images from doc bodies, trim old task days
 function drClearOldStorage() {
   let freed = 0;
-  // Strip base64 images from docs in localStorage
-  try {
-    const rawDocs = JSON.parse(localStorage.getItem('dash_docs') || '[]');
-    const stripped = rawDocs.map(d => {
-      if (!d?.body?.includes('data:image')) return d;
-      const before = d.body.length;
-      const newBody = d.body.replace(/<img[^>]+data:image[^>]+>/gi, '<p>[image — open doc to reload]</p>');
-      freed += before - newBody.length;
-      return { ...d, body: newBody };
-    });
-    localStorage.setItem('dash_docs', JSON.stringify(stripped));
-    docs = stripped; // update in-memory too
-  } catch(e) {}
+  // Strip base64 images from docs, trashedDocs, and lockedDocs in localStorage
+  ['docs','trashedDocs','lockedDocs'].forEach(key => {
+    try {
+      const raw = JSON.parse(localStorage.getItem('dash_'+key) || '[]');
+      const stripped = raw.map(d => {
+        if (!d?.body?.includes('data:image')) return d;
+        const before = d.body.length;
+        const newBody = d.body.replace(/<img[^>]+data:image[^>]+>/gi, '<p>[image — open doc to reload]</p>');
+        freed += before - newBody.length;
+        return { ...d, body: newBody };
+      });
+      localStorage.setItem('dash_'+key, JSON.stringify(stripped));
+      if (key === 'docs') docs = stripped; // update in-memory too
+    } catch(e) {}
+  });
   // Trim task days older than 90 days
   try {
     const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 90);
