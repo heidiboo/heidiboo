@@ -8056,6 +8056,140 @@ function startCrabCelebration() {
   requestAnimationFrame(loop);
 }
 
+// ---- POMODORO TIMER ----
+const POMO_DURATIONS = { focus: 25*60, short: 5*60, long: 15*60 };
+const POMO_QUOTES = [
+  'one thing at a time.', 'you got this.', 'stay in the zone.',
+  'deep work wins.', 'focus is a superpower.', 'progress over perfect.',
+  'ship it.', 'block out the noise.', 'make it happen.', 'just keep going.',
+];
+let _pomoMode    = 'focus';
+let _pomoSec     = POMO_DURATIONS.focus;
+let _pomoRunning = false;
+let _pomoInterval = null;
+let _pomoSessions = 0;
+let _pomoDate    = '';
+
+function _pomoFmt(s) {
+  return String(Math.floor(s/60)).padStart(2,'0') + ':' + String(s%60).padStart(2,'0');
+}
+
+function _pomoCircle(id, pct, circumference) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.style.strokeDasharray  = circumference;
+  el.style.strokeDashoffset = circumference * (1 - pct);
+}
+
+function pomoRender() {
+  const todayStr = new Date().toISOString().slice(0,10);
+  if (_pomoDate !== todayStr) { _pomoSessions = 0; _pomoDate = todayStr; }
+
+  const pct = _pomoSec / POMO_DURATIONS[_pomoMode];
+  const fmt = _pomoFmt(_pomoSec);
+
+  // Small ring
+  const sd = document.getElementById('pomo-display');       if (sd) sd.textContent = fmt;
+  _pomoCircle('pomo-ring-progress', pct, 141);
+
+  // Big ring
+  const bd = document.getElementById('pomo-big-display');   if (bd) bd.textContent = fmt;
+  _pomoCircle('pomo-big-progress', pct, 440);
+  const bl = document.getElementById('pomo-big-label');
+  if (bl) bl.textContent = _pomoMode === 'focus' ? 'FOCUS' : _pomoMode === 'short' ? 'SHORT BREAK' : 'LONG BREAK';
+
+  // Phase label
+  const pl = document.getElementById('pomo-phase-label');
+  if (pl) pl.textContent = _pomoMode === 'focus' ? 'Focus' : _pomoMode === 'short' ? 'Short Break' : 'Long Break';
+
+  // Sessions
+  const sc = document.getElementById('pomo-sessions');
+  if (sc) sc.textContent = _pomoSessions + ' session' + (_pomoSessions===1?'':'s') + ' today';
+
+  // Show/hide big ring vs small ring based on running state
+  const bigWrap  = document.getElementById('pomo-big-wrap');
+  const smallSec = document.getElementById('pomo-small-section');
+  const motiv    = document.getElementById('pomo-motivational');
+  if (bigWrap)  bigWrap.style.display  = _pomoRunning ? 'flex' : 'none';
+  if (smallSec) smallSec.style.display = _pomoRunning ? 'none' : 'flex';
+  if (motiv)    motiv.style.display    = _pomoRunning ? 'flex' : 'none';
+
+  // Quote while running
+  if (_pomoRunning) {
+    const q = document.getElementById('pomo-quote');
+    if (q && !q.textContent) q.textContent = POMO_QUOTES[Math.floor(Math.random()*POMO_QUOTES.length)];
+  }
+
+  // Active button
+  ['focus','short','long'].forEach(m => {
+    const btn = document.getElementById('pomo-'+m+'-btn');
+    if (btn) btn.classList.toggle('active', m === _pomoMode);
+  });
+}
+
+function pomoToggle() {
+  if (_pomoRunning) {
+    clearInterval(_pomoInterval);
+    _pomoInterval = null;
+    _pomoRunning  = false;
+    const q = document.getElementById('pomo-quote');
+    if (q) q.textContent = '';
+  } else {
+    _pomoRunning = true;
+    _pomoInterval = setInterval(() => {
+      _pomoSec--;
+      if (_pomoSec <= 0) {
+        _pomoSec = 0;
+        pomoRender();
+        clearInterval(_pomoInterval);
+        _pomoInterval = null;
+        _pomoRunning  = false;
+        if (_pomoMode === 'focus') {
+          _pomoSessions++;
+          const today = new Date().toISOString().slice(0,10);
+          save('pomoSessions', _pomoSessions);
+          save('pomoDate', today);
+        }
+        try { new Audio('data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAA').play(); } catch(_) {}
+        setTimeout(() => pomoRender(), 50);
+        return;
+      }
+      pomoRender();
+    }, 1000);
+  }
+  pomoRender();
+}
+
+function pomoSetMode(mode) {
+  if (!POMO_DURATIONS[mode]) return;
+  clearInterval(_pomoInterval);
+  _pomoInterval = null;
+  _pomoRunning  = false;
+  _pomoMode = mode;
+  _pomoSec  = POMO_DURATIONS[mode];
+  const q = document.getElementById('pomo-quote');
+  if (q) q.textContent = '';
+  pomoRender();
+}
+
+function pomoReset() {
+  clearInterval(_pomoInterval);
+  _pomoInterval = null;
+  _pomoRunning  = false;
+  _pomoSec = POMO_DURATIONS[_pomoMode];
+  pomoRender();
+}
+
+function _pomoLoadState() {
+  const todayStr = new Date().toISOString().slice(0,10);
+  const savedDate = load('pomoDate', '');
+  _pomoSessions = savedDate === todayStr ? (load('pomoSessions', 0) || 0) : 0;
+  _pomoDate = todayStr;
+  _pomoMode = 'focus';
+  _pomoSec  = POMO_DURATIONS.focus;
+  _pomoRunning = false;
+}
+
 // ---- FLOW CANVAS (breathing wave) ----
 function initFlowCanvas(canvasId, numLines) {
   const c = document.getElementById(canvasId);
@@ -8124,6 +8258,7 @@ function init() {
   renderAll();
   initMode();
   initFlowCanvas('flow-canvas', 8);
+  _pomoLoadState();
   pomoRender();
   renderFinances();
 }
