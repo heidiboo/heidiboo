@@ -3443,6 +3443,30 @@ function loadAll() {
     if (cleaned) save('taskDays', taskDays);
     save('cleaned_empty_rolled_v1', true);
   }
+
+  // One-time cleanup: remove tasks that got incorrectly bulk-rolled into today due to the renderAll bug
+  if (!load('cleaned_bad_rollover_v1', false)) {
+    const today = todayKey();
+    const todayCard = taskDays.find(d => d.date === today);
+    if (todayCard) {
+      const before = todayCard.tasks.length;
+      // Remove all rolled-in copies from today; un-mark originals so they can roll naturally tomorrow
+      const rolledFromDates = new Set(todayCard.tasks.filter(t => t.rolledFrom).map(t => t.id));
+      todayCard.tasks = todayCard.tasks.filter(t => !t.rolledFrom);
+      if (todayCard.tasks.length !== before) {
+        // Un-mark originals in their source days so rollover works correctly going forward
+        taskDays.forEach(day => {
+          if (day.date === today) return;
+          day.tasks.forEach(t => {
+            if (rolledFromDates.has(t.id)) t.rolledOver = false;
+          });
+        });
+        todayCard._updatedTs = Date.now();
+        save('taskDays', taskDays);
+      }
+    }
+    save('cleaned_bad_rollover_v1', true);
+  }
 }
 
 // ---- RENDER ----
