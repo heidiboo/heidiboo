@@ -3463,6 +3463,14 @@ function loadAll() {
         });
         todayCard._updatedTs = Date.now();
         save('taskDays', taskDays);
+        // Immediately write cleaned card to Supabase — don't rely on debounced timer.
+        // Without this, a quick refresh pulls back the old rolled tasks from Supabase.
+        const todayKey2 = 'taskday_' + today;
+        sb.from('tasks').upsert({ id: todayKey2, date: todayKey2, data: todayCard }, { onConflict: 'id' })
+          .catch(e => console.warn('[cleanup] taskday flush failed:', e.message));
+        // Also overwrite the bulk taskDays row so the merge can't restore old data
+        sb.from('tasks').upsert({ id: 'taskDays', date: 'taskDays', data: taskDays }, { onConflict: 'id' })
+          .catch(e => console.warn('[cleanup] taskDays bulk flush failed:', e.message));
       }
     }
     save('cleaned_bad_rollover_v1', true);
