@@ -4627,7 +4627,14 @@ function toggleDayTask(date, id) {
   if (task) task.done = !task.done;
   if (task && task.rolledFrom) {
     const srcDay = taskDays.find(d => d.date === task.rolledFrom);
-    if (srcDay) { const src = srcDay.tasks.find(t => t.id === id); if (src) src.done = task.done; srcDay._updatedTs = Date.now(); }
+    if (srcDay) {
+      const src = srcDay.tasks.find(t => t.id === id);
+      if (src) {
+        src.done = task.done;
+        if (task.done) src.rolledOver = true; // checked done → never roll again
+        srcDay._updatedTs = Date.now();
+      }
+    }
   }
   sortTasksInDay(day);
   day._updatedTs = Date.now();
@@ -4641,6 +4648,15 @@ function toggleDayTask(date, id) {
 function deleteDayTask(date, id) {
   const day = taskDays.find(d => d.date === date);
   if (!day) return;
+  const task = day.tasks.find(t => t.id === id);
+  // If deleting a rolled copy, mark the original as rolledOver so it never rolls again
+  if (task?.rolledFrom) {
+    const srcDay = taskDays.find(d => d.date === task.rolledFrom);
+    if (srcDay) {
+      const src = srcDay.tasks.find(t => t.id === id);
+      if (src) { src.rolledOver = true; srcDay._updatedTs = Date.now(); }
+    }
+  }
   day.tasks = day.tasks.filter(t => t.id !== id);
   day._updatedTs = Date.now();
   save('taskDays', taskDays);
