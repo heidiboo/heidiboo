@@ -2231,17 +2231,22 @@ async function loadFromSupabase() {
       // Pick the base with the newer timestamp, then patch in per-task flags from the other
       const base = ((a._updatedTs || 0) >= (b._updatedTs || 0)) ? a : b;
       const other = base === a ? b : a;
-      if (!other?.tasks?.length) return base;
       const merged = JSON.parse(JSON.stringify(base));
+      // Union deleted IDs from both sides — a deletion is permanent and must win
+      merged._deletedTaskIds = [...new Set([...(a._deletedTaskIds || []), ...(b._deletedTaskIds || [])])];
+      const deletedSet = new Set(merged._deletedTaskIds);
+      if (!other?.tasks?.length) return merged;
       const taskMap = {};
       merged.tasks.forEach(t => { if (t.id) taskMap[t.id] = t; });
       other.tasks.forEach(t => {
-        if (!t.id) return;
+        if (!t.id || deletedSet.has(t.id)) return; // never resurrect a deleted task
         if (!taskMap[t.id]) { merged.tasks.push(t); taskMap[t.id] = t; return; }
         // Preserve the most-advanced flags — done and rolledOver are never un-done by a stale version
         if (t.done) taskMap[t.id].done = true;
         if (t.rolledOver) taskMap[t.id].rolledOver = true;
       });
+      // Also strip any tasks that slipped through with a deleted ID
+      merged.tasks = merged.tasks.filter(t => !deletedSet.has(t.id));
       return merged;
     }
 
@@ -2376,7 +2381,7 @@ async function loadFromSupabase() {
     // New project in Supabase that wasn't local
     if (Object.keys(merged).length > localProjs.length) mergeGainedData = true;
 
-    const finalProjs = Object.values(merged);
+    const finalProjs = Object.values(merged).filter(p => !p._deleted);
     if (finalProjs.length > 0) {
       saveLocal('projects', finalProjs);
       // Only push back to Supabase if merge gained new data — avoids N upserts on every startup
@@ -3966,6 +3971,13 @@ function deleteProject(i) {
   trashedProjects.push({ ...p, trashedAt: Date.now() });
   save('projects', projects);
   save('trashedProjects', trashedProjects);
+  // Immediately overwrite the individual project row in Supabase with _deleted flag
+  // so the merge can never resurrect it from an older Supabase snapshot
+  sb.from('projects').upsert({ id: p.id, data: { ...p, _deleted: true } }, { onConflict: 'id' })
+    .catch(e => console.warn('[deleteProject] flush failed:', e.message));
+  // Also immediately push the updated projects list (without deleted project)
+  sb.from('projects').upsert({ id: 'projects', data: projects }, { onConflict: 'id' })
+    .catch(e => console.warn('[deleteProject] bulk flush failed:', e.message));
   renderProjects(); renderOverview();
 }
 
@@ -4657,9 +4669,15 @@ function deleteDayTask(date, id) {
       if (src) { src.rolledOver = true; srcDay._updatedTs = Date.now(); }
     }
   }
+  // Track the deleted ID so the Supabase merge never re-adds it
+  day._deletedTaskIds = [...new Set([...(day._deletedTaskIds || []), id])];
   day.tasks = day.tasks.filter(t => t.id !== id);
   day._updatedTs = Date.now();
   save('taskDays', taskDays);
+  // Immediately flush this day to Supabase so the deletion persists across refreshes
+  const dayKey = 'taskday_' + date;
+  sb.from('tasks').upsert({ id: dayKey, date: dayKey, data: day }, { onConflict: 'id' })
+    .catch(e => console.warn('[deleteDayTask] flush failed:', e.message));
   renderTaskDays();
   renderTodos();
   renderFocusTodos();
@@ -7596,6 +7614,7 @@ function addActionLog(pi) {
   syncToSupabase('proj_' + p.id, p);        // also queue in timer as belt-and-suspenders backup
   syncToSupabase('projects', projects);      // bulk backup
   inp.value = '';
+  toggleActionLogInput(pi); // dismiss the input area
   renderProjectDetail();
 }
 
