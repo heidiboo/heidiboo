@@ -2244,6 +2244,7 @@ async function loadFromSupabase() {
         // Preserve the most-advanced flags — done and rolledOver are never un-done by a stale version
         if (t.done) taskMap[t.id].done = true;
         if (t.rolledOver) taskMap[t.id].rolledOver = true;
+        if (t.deleted) { taskMap[t.id].deleted = true; taskMap[t.id].rolledOver = true; }
       });
       // Also strip any tasks that slipped through with a deleted ID
       merged.tasks = merged.tasks.filter(t => !deletedSet.has(t.id));
@@ -3480,6 +3481,30 @@ function loadAll() {
     }
     save('cleaned_bad_rollover_v1', true);
   }
+
+  // v2 cleanup: v1 mistakenly reset rolledOver=false on originals, causing them to re-roll every load.
+  // This removes all rolledFrom tasks from today WITHOUT touching originals, then hard-flushes to Supabase.
+  if (!load('cleaned_bad_rollover_v2', false)) {
+    const today = todayKey();
+    const todayCard = taskDays.find(d => d.date === today);
+    if (todayCard) {
+      const before = todayCard.tasks.length;
+      todayCard.tasks = todayCard.tasks.filter(t => !t.rolledFrom && !t.deleted);
+      if (todayCard.tasks.length !== before) {
+        todayCard._updatedTs = Date.now();
+        save('taskDays', taskDays);
+        // Hard-flush every day card to Supabase so no stale individual row can override
+        taskDays.forEach(day => {
+          const dk = 'taskday_' + day.date;
+          sb.from('tasks').upsert({ id: dk, date: dk, data: day }, { onConflict: 'id' })
+            .catch(() => {});
+        });
+        sb.from('tasks').upsert({ id: 'taskDays', date: 'taskDays', data: taskDays }, { onConflict: 'id' })
+          .catch(() => {});
+      }
+    }
+    save('cleaned_bad_rollover_v2', true);
+  }
 }
 
 // ---- RENDER ----
@@ -3777,7 +3802,7 @@ function renderTodos() {
   const el = document.getElementById('todo-list');
   if (!el) return;
   const day = getTodayCard();
-  const visible = day.tasks.filter(t => !t.rolledOver);
+  const visible = day.tasks.filter(t => !t.rolledOver && !t.deleted);
   if (!visible.length) {
     el.innerHTML = '<div class="empty-state" style="padding:16px 0;cursor:pointer;color:var(--ink2)" onclick="addInlineTodo()">+ add a task for today...</div>';
     return;
@@ -4118,14 +4143,18 @@ function rolloverTasks() {
   // Collect all task IDs that exist in today (by id and by original text) to avoid re-rolling
   const todayIds = new Set(todayCard.tasks.map(t => t.id));
 
+  // Only roll from the past 7 days — tasks older than a week should not auto-resurface
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 7);
+  const cutoffStr = cutoff.toISOString().slice(0, 10);
+
   taskDays.forEach(day => {
     if (day.date === today) return;
+    if (day.date < cutoffStr) return; // skip ancient days
     day.tasks.forEach(t => {
-      // Only roll: not done, has text, not already deleted (still exists in its day), not yet in today
-      if (t.done || !t.text?.trim() || t.rolledOver || todayIds.has(t.id)) return;
+      if (t.done || t.deleted || !t.text?.trim() || t.rolledOver || todayIds.has(t.id)) return;
       todayCard.tasks.unshift({ ...t, rolledFrom: t.rolledFrom || day.date });
       todayIds.add(t.id);
-      t.rolledOver = true; // mark so it never rolls again
+      t.rolledOver = true;
     });
   });
 
@@ -4154,7 +4183,7 @@ function generateWeeklyRecap() {
   const doneTasks = [];
   taskDays.forEach(td => {
     if (!weekKeys.includes(td.date)) return;
-    td.tasks.filter(t=>t.done&&!t.rolledOver).forEach(t => {
+    td.tasks.filter(t=>t.done&&!t.rolledOver&&!t.deleted).forEach(t => {
       doneTasks.push({ text:t.text, date:td.date, notes:t.body||'' });
     });
   });
@@ -4264,7 +4293,7 @@ function renderTaskDays() {
 
   el.innerHTML = monthDays.map(day => {
     const isToday = day.date === today;
-    const visible = day.tasks.filter(t => !t.rolledOver);
+    const visible = day.tasks.filter(t => !t.rolledOver && !t.deleted);
     // Sort: pending first, done at bottom
     const sorted = [...visible.filter(t=>!t.done), ...visible.filter(t=>t.done)];
     const done = sorted.filter(t=>t.done).length;
@@ -4407,7 +4436,7 @@ function renderTasksSidebar() {
     const [y,m] = d.date.slice(0,7).split('-');
     if (!byYear[y]) byYear[y] = {};
     if (!byYear[y][m]) byYear[y][m] = 0;
-    byYear[y][m] += d.tasks.filter(t=>!t.rolledOver).length;
+    byYear[y][m] += d.tasks.filter(t=>!t.rolledOver&&!t.deleted).length;
   });
 
   const years = Object.keys(byYear).sort((a,b) => b-a);
@@ -4473,7 +4502,7 @@ function onTaskDrop(e) {
 
   const day = taskDays.find(d => d.date === dragSrcDate);
   if (!day) return;
-  const visible = day.tasks.filter(t => !t.rolledOver);
+  const visible = day.tasks.filter(t => !t.rolledOver && !t.deleted);
   const srcIdx = visible.findIndex(t => t.id === dragSrcId);
   const tgtIdx = visible.findIndex(t => t.id === targetId);
   if (srcIdx < 0 || tgtIdx < 0) return;
@@ -4661,20 +4690,22 @@ function deleteDayTask(date, id) {
   const day = taskDays.find(d => d.date === date);
   if (!day) return;
   const task = day.tasks.find(t => t.id === id);
-  // If deleting a rolled copy, mark the original as rolledOver so it never rolls again
-  if (task?.rolledFrom) {
+  if (!task) return;
+  // Mark deleted: true IN the array so the flag travels through every Supabase merge.
+  // Never splice — removing from the array means Supabase re-adds it on next load.
+  task.deleted = true;
+  task.rolledOver = true; // also stop it from ever rolling again
+  // If it's a rolled copy, mark the original too
+  if (task.rolledFrom) {
     const srcDay = taskDays.find(d => d.date === task.rolledFrom);
     if (srcDay) {
       const src = srcDay.tasks.find(t => t.id === id);
-      if (src) { src.rolledOver = true; srcDay._updatedTs = Date.now(); }
+      if (src) { src.deleted = true; src.rolledOver = true; srcDay._updatedTs = Date.now(); }
     }
   }
-  // Track the deleted ID so the Supabase merge never re-adds it
-  day._deletedTaskIds = [...new Set([...(day._deletedTaskIds || []), id])];
-  day.tasks = day.tasks.filter(t => t.id !== id);
   day._updatedTs = Date.now();
   save('taskDays', taskDays);
-  // Immediately flush this day to Supabase so the deletion persists across refreshes
+  // Immediately flush to Supabase — don't wait for the debounced timer
   const dayKey = 'taskday_' + date;
   sb.from('tasks').upsert({ id: dayKey, date: dayKey, data: day }, { onConflict: 'id' })
     .catch(e => console.warn('[deleteDayTask] flush failed:', e.message));
@@ -7883,7 +7914,7 @@ function renderFocusTodos() {
   if (!el) return;
   const hint = document.getElementById('focus-add-hint');
   const day = getTodayCard();
-  const visible = day.tasks.filter(t => !t.rolledOver);
+  const visible = day.tasks.filter(t => !t.rolledOver && !t.deleted);
 
   // Show the add hint only when the list is empty
   if (hint) hint.style.display = visible.length === 0 ? 'block' : 'none';
@@ -7946,7 +7977,7 @@ let sootActive = false;
 function checkAllTasksDone() {
   const day = getTodayCard();
   const pending = day.tasks.filter(t => !t.done && !t.rolledOver);
-  if (pending.length === 0 && day.tasks.filter(t => !t.rolledOver).length > 0) {
+  if (pending.length === 0 && day.tasks.filter(t => !t.rolledOver && !t.deleted).length > 0) {
     startCrabCelebration();
   }
 }
