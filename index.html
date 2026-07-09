@@ -3505,6 +3505,33 @@ function loadAll() {
     }
     save('cleaned_bad_rollover_v2', true);
   }
+
+  // v3 cleanup: mark ALL done or rolledFrom tasks across ALL days as deleted+rolledOver
+  // so they can never reappear. Flush every affected day to Supabase immediately.
+  if (!load('cleaned_bad_rollover_v3', false)) {
+    let anyChanged = false;
+    taskDays.forEach(day => {
+      let changed = false;
+      day.tasks.forEach(t => {
+        if ((t.done || t.rolledFrom) && (!t.deleted || !t.rolledOver)) {
+          t.deleted = true;
+          t.rolledOver = true;
+          changed = true;
+        }
+      });
+      if (changed) {
+        day._updatedTs = Date.now();
+        anyChanged = true;
+        const dk = 'taskday_' + day.date;
+        sb.from('tasks').upsert({ id: dk, date: dk, data: day }, { onConflict: 'id' }).catch(() => {});
+      }
+    });
+    if (anyChanged) {
+      save('taskDays', taskDays);
+      sb.from('tasks').upsert({ id: 'taskDays', date: 'taskDays', data: taskDays }, { onConflict: 'id' }).catch(() => {});
+    }
+    save('cleaned_bad_rollover_v3', true);
+  }
 }
 
 // ---- RENDER ----
@@ -4667,19 +4694,31 @@ function toggleDayTask(date, id) {
   const task = day.tasks.find(t => t.id === id);
   if (task) task.done = !task.done;
   if (task && task.rolledFrom) {
+    // Rolled task checked done → treat as permanently deleted so it never shows again
+    if (task.done) {
+      task.deleted = true;
+      task.rolledOver = true;
+    }
     const srcDay = taskDays.find(d => d.date === task.rolledFrom);
     if (srcDay) {
       const src = srcDay.tasks.find(t => t.id === id);
       if (src) {
         src.done = task.done;
-        if (task.done) src.rolledOver = true; // checked done → never roll again
+        src.rolledOver = true;
+        if (task.done) src.deleted = true;
         srcDay._updatedTs = Date.now();
+        // Immediately flush the source day so it never rolls again
+        const sk = 'taskday_' + task.rolledFrom;
+        sb.from('tasks').upsert({ id: sk, date: sk, data: srcDay }, { onConflict: 'id' }).catch(() => {});
       }
     }
   }
   sortTasksInDay(day);
   day._updatedTs = Date.now();
   save('taskDays', taskDays);
+  // Immediately flush today's card to Supabase
+  const dk = 'taskday_' + date;
+  sb.from('tasks').upsert({ id: dk, date: dk, data: day }, { onConflict: 'id' }).catch(() => {});
   renderTaskDays();
   renderTodos();
   renderFocusTodos();
