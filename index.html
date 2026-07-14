@@ -3507,31 +3507,22 @@ function loadAll() {
     save('cleaned_bad_rollover_v2', true);
   }
 
-  // v3 cleanup: mark ALL done or rolledFrom tasks across ALL days as deleted+rolledOver
-  // so they can never reappear. Flush every affected day to Supabase immediately.
+  // v3 cleanup: remove remaining rolledFrom tasks (rolled copies only, not original done tasks)
   if (!load('cleaned_bad_rollover_v3', false)) {
-    let anyChanged = false;
-    taskDays.forEach(day => {
-      let changed = false;
-      day.tasks.forEach(t => {
-        if ((t.done || t.rolledFrom) && (!t.deleted || !t.rolledOver)) {
-          t.deleted = true;
-          t.rolledOver = true;
-          changed = true;
-        }
-      });
-      if (changed) {
-        day._updatedTs = Date.now();
-        anyChanged = true;
-        const dk = 'taskday_' + day.date;
-        sb.from('tasks').upsert({ id: dk, date: dk, data: day }, { onConflict: 'id' }).catch(() => {});
+    save('cleaned_bad_rollover_v3', true); // set flag FIRST — prevents re-entry if save() triggers loadAll()
+    const today = todayKey();
+    const todayCard = taskDays.find(d => d.date === today);
+    if (todayCard) {
+      const before = todayCard.tasks.length;
+      todayCard.tasks = todayCard.tasks.filter(t => !t.rolledFrom);
+      if (todayCard.tasks.length !== before) {
+        todayCard._updatedTs = Date.now();
+        save('taskDays', taskDays);
+        const dk = 'taskday_' + today;
+        sb.from && sb.from('tasks').upsert({ id: dk, date: dk, data: todayCard }, { onConflict: 'id' }).catch(() => {});
+        sb.from && sb.from('tasks').upsert({ id: 'taskDays', date: 'taskDays', data: taskDays }, { onConflict: 'id' }).catch(() => {});
       }
-    });
-    if (anyChanged) {
-      save('taskDays', taskDays);
-      sb.from('tasks').upsert({ id: 'taskDays', date: 'taskDays', data: taskDays }, { onConflict: 'id' }).catch(() => {});
     }
-    save('cleaned_bad_rollover_v3', true);
   }
 }
 
