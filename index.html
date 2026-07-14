@@ -637,6 +637,7 @@
   .day-task:hover .day-task-inner { background: rgba(0,0,0,0.018); }
   .day-task.dragging { opacity: 0.4; }
   .day-task.drag-over { border-top: 2px solid var(--ink); }
+  .day-list-drag-over { outline: 2px dashed var(--ink); outline-offset: -2px; border-radius: var(--radius-sm); min-height: 40px; }
   .day-task-check { width: 15px; height: 15px; border-radius: 4px; border: 1.5px solid #ccc; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: border-color 0.12s, background 0.12s; margin-top: 1px; }
   .day-task-check:hover { border-color: var(--ink); }
   .day-task-check.done { background: var(--ink); border-color: var(--ink); }
@@ -4339,7 +4340,8 @@ function renderTaskDays() {
             ${!sorted.length ? `<span style="font-size:10px;color:var(--ink2)">empty</span>` : ''}
           </div>
         </div>
-        <div class="day-task-list" id="tasklist-${day.date}" data-date="${day.date}">
+        <div class="day-task-list" id="tasklist-${day.date}" data-date="${day.date}"
+          ondragover="onDayListDragOver(event)" ondragleave="onDayListDragLeave(event)" ondrop="onDayListDrop(event)">
           ${sorted.map(t => renderTaskRow(t, day.date)).join('')
             || '<button class="lets-go-btn" onclick="addFirstTask(\'' + day.date + '\')">✦ Let\'s get things done</button>'}
         </div>
@@ -4521,26 +4523,85 @@ function onTaskDragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
 function onTaskDragEnd(e)   { e.currentTarget.classList.remove('dragging'); }
 function onTaskDrop(e) {
   e.preventDefault();
+  e.stopPropagation(); // don't bubble to day-list drop handler
   const targetRow  = e.currentTarget;
   const targetId   = targetRow.dataset.id;
   const targetDate = targetRow.dataset.date;
   targetRow.classList.remove('drag-over');
-  if (!dragSrcId || dragSrcId === targetId || dragSrcDate !== targetDate) return;
+  if (!dragSrcId || dragSrcId === targetId) return;
 
-  const day = taskDays.find(d => d.date === dragSrcDate);
-  if (!day) return;
-  const visible = day.tasks.filter(t => !t.rolledOver && !t.deleted);
-  const srcIdx = visible.findIndex(t => t.id === dragSrcId);
-  const tgtIdx = visible.findIndex(t => t.id === targetId);
-  if (srcIdx < 0 || tgtIdx < 0) return;
-
-  // Reorder in the visible array
-  const [moved] = visible.splice(srcIdx, 1);
-  visible.splice(tgtIdx, 0, moved);
-
-  // Rebuild full task array: reordered visible + rolled-over
-  day.tasks = [...visible, ...day.tasks.filter(t => t.rolledOver)];
+  if (dragSrcDate === targetDate) {
+    // Same-day reorder
+    const day = taskDays.find(d => d.date === dragSrcDate);
+    if (!day) return;
+    const visible = day.tasks.filter(t => !t.rolledOver && !t.deleted);
+    const srcIdx = visible.findIndex(t => t.id === dragSrcId);
+    const tgtIdx = visible.findIndex(t => t.id === targetId);
+    if (srcIdx < 0 || tgtIdx < 0) return;
+    const [moved] = visible.splice(srcIdx, 1);
+    visible.splice(tgtIdx, 0, moved);
+    day.tasks = [...visible, ...day.tasks.filter(t => t.rolledOver || t.deleted)];
+  } else {
+    // Cross-day move
+    _moveTaskToDay(dragSrcId, dragSrcDate, targetDate, targetId);
+    return;
+  }
   save('taskDays', taskDays);
+  renderTaskDays();
+}
+
+// Drop onto the day-list container itself (empty days or below all tasks)
+function onDayListDragOver(e) {
+  if (!dragSrcId) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  e.currentTarget.classList.add('day-list-drag-over');
+}
+function onDayListDragLeave(e) {
+  // Only remove highlight if leaving the container entirely
+  if (!e.currentTarget.contains(e.relatedTarget)) {
+    e.currentTarget.classList.remove('day-list-drag-over');
+  }
+}
+function onDayListDrop(e) {
+  e.preventDefault();
+  const list = e.currentTarget;
+  list.classList.remove('day-list-drag-over');
+  const targetDate = list.dataset.date;
+  if (!dragSrcId || !targetDate || targetDate === dragSrcDate) return;
+  _moveTaskToDay(dragSrcId, dragSrcDate, targetDate, null);
+}
+
+// Move a task from one day to another, optionally inserting before a target task
+function _moveTaskToDay(taskId, fromDate, toDate, beforeTaskId) {
+  const srcDay = taskDays.find(d => d.date === fromDate);
+  const dstDay = taskDays.find(d => d.date === toDate);
+  if (!srcDay || !dstDay) return;
+
+  const taskIdx = srcDay.tasks.findIndex(t => t.id === taskId);
+  if (taskIdx < 0) return;
+  const [task] = srcDay.tasks.splice(taskIdx, 1);
+
+  // Clear rollover metadata — it's now a regular task on the new day
+  delete task.rolledFrom;
+  task.rolledOver = false;
+  task.done = false; // moving resets done state so it's a fresh todo on the new day
+  srcDay._updatedTs = Date.now();
+
+  if (beforeTaskId) {
+    const tgtIdx = dstDay.tasks.findIndex(t => t.id === beforeTaskId);
+    if (tgtIdx >= 0) { dstDay.tasks.splice(tgtIdx, 0, task); }
+    else { dstDay.tasks.unshift(task); }
+  } else {
+    dstDay.tasks.push(task);
+  }
+  dstDay._updatedTs = Date.now();
+
+  save('taskDays', taskDays);
+  // Flush both affected days immediately
+  const sk = 'taskday_' + fromDate, dk = 'taskday_' + toDate;
+  sb.from('tasks').upsert({ id: sk, date: sk, data: srcDay }, { onConflict: 'id' }).catch(() => {});
+  sb.from('tasks').upsert({ id: dk, date: dk, data: dstDay }, { onConflict: 'id' }).catch(() => {});
   renderTaskDays();
 }
 
