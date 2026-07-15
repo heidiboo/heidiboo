@@ -3524,6 +3524,35 @@ function loadAll() {
       }
     }
   }
+
+  // Deduplicate projects by name — keep the one with the highest _updatedTs, nuke the rest from Supabase
+  if (!load('cleaned_dup_projects_v1', false)) {
+    save('cleaned_dup_projects_v1', true); // set first to prevent re-entry
+    const seen = {};
+    const toDelete = [];
+    projects.forEach(p => {
+      const key = (p.name || '').trim().toLowerCase();
+      if (!seen[key]) { seen[key] = p; return; }
+      // Keep whichever has the higher _updatedTs / lastOpened
+      const prev = seen[key];
+      const prevTs = Math.max(prev._updatedTs || 0, prev.lastOpened || 0);
+      const curTs  = Math.max(p._updatedTs  || 0, p.lastOpened  || 0);
+      if (curTs > prevTs) { toDelete.push(prev); seen[key] = p; }
+      else                { toDelete.push(p); }
+    });
+    if (toDelete.length) {
+      const deleteIds = new Set(toDelete.map(p => p.id));
+      projects = projects.filter(p => !deleteIds.has(p.id));
+      saveLocal('projects', projects);
+      syncToSupabase('projects', projects);
+      // Mark each duplicate as _deleted in its individual Supabase row so the merge never restores it
+      toDelete.forEach(p => {
+        sb.from && sb.from('projects').upsert({ id: p.id, data: { ...p, _deleted: true } }, { onConflict: 'id' }).catch(() => {});
+      });
+      // Also push the clean projects list immediately
+      sb.from && sb.from('projects').upsert({ id: 'projects', data: projects }, { onConflict: 'id' }).catch(() => {});
+    }
+  }
 }
 
 // ---- RENDER ----
