@@ -7736,7 +7736,11 @@ function addActionLog(pi) {
   syncToSupabase('proj_' + p.id, p);        // also queue in timer as belt-and-suspenders backup
   syncToSupabase('projects', projects);      // bulk backup
   inp.value = '';
-  toggleActionLogInput(pi); // dismiss the input area
+  // Force-close the input area directly — don't rely on toggle's open/closed state check
+  const area = document.getElementById('action-log-input-area');
+  const btn  = document.getElementById('action-log-toggle-btn');
+  if (area) area.style.display = 'none';
+  if (btn)  btn.textContent = '+ Log';
   renderProjectDetail();
 }
 
