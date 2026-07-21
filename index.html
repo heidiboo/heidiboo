@@ -3957,20 +3957,7 @@ function sortTasksInDay(day) {
 }
 
 function toggleTodoById(id) {
-  const day = getTodayCard();
-  const t = day.tasks.find(t => t.id === id);
-  if (t) t.done = !t.done;
-  sortTasksInDay(day);
-  day._updatedTs = Date.now();
-  saveLocal('taskDays', taskDays);        // instant local write
-  const todayKey = new Date().toISOString().slice(0, 10);
-  flushNow('taskday_' + todayKey, day);  // instant Supabase write — no timer
-  syncToSupabase('taskday_' + todayKey, day); // also queue as backup
-  syncToSupabase('taskDays', taskDays);
-  renderTodos();
-  renderFocusTodos();
-  renderTaskDays();
-  checkAllTasksDone();
+  _toggleTaskById(getTodayCard().date, id);
 }
 
 function deleteTodoById(id) {
@@ -4769,42 +4756,60 @@ function placeCursorEnd(el) {
   sel.addRange(range);
 }
 
-function toggleDayTask(date, id) {
+// Shared toggle — called from all three task views for consistent behavior and no lag
+function _toggleTaskById(date, id) {
   const day = taskDays.find(d => d.date === date);
   if (!day) return;
   const task = day.tasks.find(t => t.id === id);
-  if (task) task.done = !task.done;
-  if (task && task.rolledFrom) {
-    // Rolled task checked done → treat as permanently deleted so it never shows again
-    if (task.done) {
-      task.deleted = true;
-      task.rolledOver = true;
-    }
+  if (!task) return;
+
+  // ── Optimistic UI: flip visuals instantly before any save/re-render ──
+  const nowDone = !task.done;
+  document.querySelectorAll(`[data-id="${id}"] .day-task-check, [data-id="${id}"] .f-check, [data-id="${id}"] .todo-check`).forEach(el => {
+    el.classList.toggle('done', nowDone);
+  });
+  document.querySelectorAll(`[data-id="${id}"] .day-task-label, [data-id="${id}"] .f-task-text, [data-id="${id}"] .todo-label`).forEach(el => {
+    el.classList.toggle('done', nowDone);
+    if (nowDone) el.removeAttribute('contenteditable');
+  });
+
+  task.done = nowDone;
+
+  // Rolled task checked done → permanently gone
+  if (task.rolledFrom) {
+    if (nowDone) { task.deleted = true; task.rolledOver = true; }
     const srcDay = taskDays.find(d => d.date === task.rolledFrom);
     if (srcDay) {
-      const src = srcDay.tasks.find(t => t.id === id);
+      const src = srcDay.tasks.find(s => s.id === id);
       if (src) {
-        src.done = task.done;
+        src.done = nowDone;
         src.rolledOver = true;
-        if (task.done) src.deleted = true;
+        if (nowDone) src.deleted = true;
         srcDay._updatedTs = Date.now();
-        // Immediately flush the source day so it never rolls again
         const sk = 'taskday_' + task.rolledFrom;
-        sb.from('tasks').upsert({ id: sk, date: sk, data: srcDay }, { onConflict: 'id' }).catch(() => {});
+        sb.from && sb.from('tasks').upsert({ id: sk, date: sk, data: srcDay }, { onConflict: 'id' }).catch(() => {});
       }
     }
   }
+
   sortTasksInDay(day);
   day._updatedTs = Date.now();
-  save('taskDays', taskDays);
-  // Immediately flush today's card to Supabase
+  saveLocal('taskDays', taskDays);
   const dk = 'taskday_' + date;
-  sb.from('tasks').upsert({ id: dk, date: dk, data: day }, { onConflict: 'id' }).catch(() => {});
-  renderTaskDays();
-  renderTodos();
-  renderFocusTodos();
-  checkAllTasksDone();
+  sb.from && sb.from('tasks').upsert({ id: dk, date: dk, data: day }, { onConflict: 'id' }).catch(() => {});
+  syncToSupabase('taskday_' + date, day);
+  syncToSupabase('taskDays', taskDays);
+
+  // Defer full re-renders so they don't block the instant visual flip
+  requestAnimationFrame(() => {
+    renderTodos();
+    renderFocusTodos();
+    renderTaskDays();
+    checkAllTasksDone();
+  });
 }
+
+function toggleDayTask(date, id) { _toggleTaskById(date, id); }
 
 function deleteDayTask(date, id) {
   const day = taskDays.find(d => d.date === date);
@@ -8054,37 +8059,7 @@ function renderFocusTodos() {
   `).join('');
 }
 
-function focusToggleTask(id) {
-  const day = getTodayCard();
-  const t = day.tasks.find(t => t.id === id);
-  if (!t) return;
-  t.done = !t.done;
-  // If it's a rolled copy, mirror done state to original and mark deleted so it won't re-roll
-  if (t.rolledFrom) {
-    if (t.done) { t.deleted = true; t.rolledOver = true; }
-    const srcDay = taskDays.find(d => d.date === t.rolledFrom);
-    if (srcDay) {
-      const src = srcDay.tasks.find(s => s.id === id);
-      if (src) {
-        src.done = t.done;
-        src.rolledOver = true;
-        if (t.done) src.deleted = true;
-        srcDay._updatedTs = Date.now();
-        const sk = 'taskday_' + t.rolledFrom;
-        sb.from && sb.from('tasks').upsert({ id: sk, date: sk, data: srcDay }, { onConflict: 'id' }).catch(() => {});
-      }
-    }
-  }
-  sortTasksInDay(day);
-  day._updatedTs = Date.now();
-  save('taskDays', taskDays);
-  const dk = 'taskday_' + day.date;
-  sb.from && sb.from('tasks').upsert({ id: dk, date: dk, data: day }, { onConflict: 'id' }).catch(() => {});
-  renderFocusTodos();
-  renderTodos();
-  renderTaskDays();
-  checkAllTasksDone();
-}
+function focusToggleTask(id) { _toggleTaskById(getTodayCard().date, id); }
 
 function focusAddTask() {
   const wrapper = document.getElementById('focus-inline-wrapper');
