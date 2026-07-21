@@ -8038,7 +8038,8 @@ function renderFocusTodos() {
   if (!el) return;
   const hint = document.getElementById('focus-add-hint');
   const day = getTodayCard();
-  const visible = day.tasks.filter(t => !t.rolledOver && !t.deleted);
+  // Include rolled-over tasks (rolledFrom set) — exclude only permanently hidden ones
+  const visible = day.tasks.filter(t => !t.deleted && !t.rolledOver);
 
   // Show the add hint only when the list is empty
   if (hint) hint.style.display = visible.length === 0 ? 'block' : 'none';
@@ -8056,9 +8057,29 @@ function renderFocusTodos() {
 function focusToggleTask(id) {
   const day = getTodayCard();
   const t = day.tasks.find(t => t.id === id);
-  if (t) t.done = !t.done;
+  if (!t) return;
+  t.done = !t.done;
+  // If it's a rolled copy, mirror done state to original and mark deleted so it won't re-roll
+  if (t.rolledFrom) {
+    if (t.done) { t.deleted = true; t.rolledOver = true; }
+    const srcDay = taskDays.find(d => d.date === t.rolledFrom);
+    if (srcDay) {
+      const src = srcDay.tasks.find(s => s.id === id);
+      if (src) {
+        src.done = t.done;
+        src.rolledOver = true;
+        if (t.done) src.deleted = true;
+        srcDay._updatedTs = Date.now();
+        const sk = 'taskday_' + t.rolledFrom;
+        sb.from && sb.from('tasks').upsert({ id: sk, date: sk, data: srcDay }, { onConflict: 'id' }).catch(() => {});
+      }
+    }
+  }
   sortTasksInDay(day);
+  day._updatedTs = Date.now();
   save('taskDays', taskDays);
+  const dk = 'taskday_' + day.date;
+  sb.from && sb.from('tasks').upsert({ id: dk, date: dk, data: day }, { onConflict: 'id' }).catch(() => {});
   renderFocusTodos();
   renderTodos();
   renderTaskDays();
