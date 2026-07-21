@@ -7763,19 +7763,43 @@ function addActionLog(pi) {
   const now = new Date();
   const ts = now.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) + ' · ' +
     now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true});
-  p.actionLog.push({ id: 'log_'+Date.now(), text, ts });
+  const entry = { id: 'log_'+Date.now(), text, ts };
+  p.actionLog.push(entry);
   p._updatedTs = Date.now();
-  saveLocal('projects', projects);           // instant local write
-  flushNow('proj_' + p.id, p);              // instant Supabase write — no timer, no delay
-  syncToSupabase('proj_' + p.id, p);        // also queue in timer as belt-and-suspenders backup
-  syncToSupabase('projects', projects);      // bulk backup
+  saveLocal('projects', projects);
+  flushNow('proj_' + p.id, p);
+  syncToSupabase('proj_' + p.id, p);
+  syncToSupabase('projects', projects);
+
+  // ── Instant DOM update — close box + prepend new entry without a full re-render ──
   inp.value = '';
-  // Force-close the input area directly — don't rely on toggle's open/closed state check
   const area = document.getElementById('action-log-input-area');
   const btn  = document.getElementById('action-log-toggle-btn');
   if (area) area.style.display = 'none';
   if (btn)  btn.textContent = '+ Log';
-  renderProjectDetail();
+
+  const list = document.getElementById('action-log-list');
+  if (list) {
+    // Remove "No entries yet" placeholder if present
+    const empty = list.querySelector('div[style*="italic"]');
+    if (empty) empty.remove();
+    // Prepend the new entry at the top
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);width:100%';
+    row.dataset.logId = entry.id;
+    row.dataset.pi = pi;
+    row.innerHTML = `
+      <div style="flex-shrink:0;width:5px;height:5px;border-radius:50%;background:var(--ink3);margin-top:6px"></div>
+      <div style="flex:1;min-width:0">
+        <div class="log-entry-content" contenteditable="true" style="font-size:12px;color:var(--ink);line-height:1.5;outline:none;cursor:text"
+          onblur="editActionLog(${pi},'${entry.id}',this.innerHTML)"
+          onkeydown="logEntryKeydown(event,${pi},'${entry.id}')"
+        >${escHtml(text)}</div>
+        <div style="font-size:10px;color:var(--ink3);margin-top:2px;font-family:var(--mono)">${ts}</div>
+      </div>
+      <button onclick="deleteActionLog(${pi},'${entry.id}')" style="background:none;border:none;cursor:pointer;color:var(--ink3);font-size:13px;opacity:0;padding:2px 4px;align-self:flex-start;line-height:1;flex-shrink:0" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0'" title="Delete">×</button>`;
+    list.prepend(row);
+  }
 }
 
 function editActionLog(pi, logId, newHTML) {
