@@ -3916,8 +3916,15 @@ function saveTodoLabel(id, el) {
   const newText = el.textContent.trim();
   if (!newText || newText === t.text) return;
   t.text = newText;
-  save('taskDays', taskDays);
-  renderTaskDays();
+  day._updatedTs = Date.now();
+  saveLocal('taskDays', taskDays);
+  const dk = 'taskday_' + day.date;
+  sb.from && sb.from('tasks').upsert({ id: dk, date: dk, data: day }, { onConflict: 'id' }).catch(() => {});
+  syncToSupabase('taskday_' + day.date, day);
+  // Update any other visible copies of this task label without a full re-render
+  document.querySelectorAll(`[data-id="${id}"].day-task-label, [data-id="${id}"].todo-label`).forEach(other => {
+    if (other !== el && other.textContent !== newText) other.textContent = newText;
+  });
 }
 
 function todoLabelKey(e, id, listId) {
@@ -8075,9 +8082,11 @@ function renderFocusTodos() {
 
   if (!visible.length) { el.innerHTML = ''; return; }
   el.innerHTML = visible.map(t => `
-    <div class="f-task">
+    <div class="f-task" data-id="${t.id}">
       <div class="f-check ${t.done ? 'done' : ''}" onclick="focusToggleTask('${t.id}')"></div>
-      <span class="f-task-text ${t.done ? 'done' : ''}" ${!t.done ? `contenteditable="true" data-id="${t.id}" onblur="saveTodoLabel('${t.id}',this)" onkeydown="todoLabelKey(event,'${t.id}','focus-todo-list')" onpaste="event.preventDefault();document.execCommand('insertText',false,event.clipboardData.getData('text/plain'))"` : ''}>${escHtml(t.text)}</span>
+      <span class="f-task-text ${t.done ? 'done' : ''}" data-id="${t.id}"
+        ${!t.done ? `contenteditable="true" onblur="saveTodoLabel('${t.id}',this)" onkeydown="todoLabelKey(event,'${t.id}','focus-todo-list')" oninput="this.dataset.dirty='1'" onpaste="event.preventDefault();document.execCommand('insertText',false,event.clipboardData.getData('text/plain'))"` : ''}
+      >${escHtml(t.text)}</span>
       ${t.rolledFrom ? `<span class="f-task-rolled">↳</span>` : ''}
     </div>
   `).join('');
